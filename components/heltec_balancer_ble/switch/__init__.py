@@ -1,7 +1,6 @@
 import esphome.codegen as cg
 from esphome.components import switch
 import esphome.config_validation as cv
-from esphome.const import CONF_ID
 
 from .. import (
     CONF_HELTEC_BALANCER_BLE_ID,
@@ -30,7 +29,7 @@ CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_BALANCER): switch.switch_schema(
             HeltecSwitch,
             icon=ICON_BALANCER,
-        ).extend(cv.COMPONENT_SCHEMA),
+        ),
     }
 )
 
@@ -40,9 +39,8 @@ async def to_code(config):
     for key, address in SWITCHES.items():
         if key in config:
             conf = config[key]
-            var = cg.new_Pvariable(conf[CONF_ID])
+            var = await switch.new_switch(conf)
             await cg.register_component(var, conf)
-            await switch.register_switch(var, conf)
             cg.add(getattr(hub, f"set_{key}_switch")(var))
             cg.add(var.set_parent(hub))
             cg.add(var.set_holding_register(address))

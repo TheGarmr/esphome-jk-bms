@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 from esphome.components import binary_sensor
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, DEVICE_CLASS_CONNECTIVITY, ENTITY_CATEGORY_DIAGNOSTIC
+from esphome.const import DEVICE_CLASS_CONNECTIVITY, ENTITY_CATEGORY_DIAGNOSTIC
 
 from . import CONF_JK_BALANCER_ID, JK_BALANCER_COMPONENT_SCHEMA
 
@@ -14,29 +14,26 @@ CONF_ONLINE_STATUS = "online_status"
 
 ICON_BALANCING = "mdi:battery-heart-variant"
 
-BINARY_SENSORS = [
-    CONF_BALANCING,
-    CONF_ONLINE_STATUS,
-]
+BINARY_SENSOR_DEFS = {
+    CONF_BALANCING: {"icon": ICON_BALANCING},
+    CONF_ONLINE_STATUS: {
+        "device_class": DEVICE_CLASS_CONNECTIVITY,
+        "entity_category": ENTITY_CATEGORY_DIAGNOSTIC,
+    },
+}
 
 CONFIG_SCHEMA = JK_BALANCER_COMPONENT_SCHEMA.extend(
     {
-        cv.Optional(CONF_BALANCING): binary_sensor.binary_sensor_schema(
-            icon=ICON_BALANCING
-        ),
-        cv.Optional(CONF_ONLINE_STATUS): binary_sensor.binary_sensor_schema(
-            device_class=DEVICE_CLASS_CONNECTIVITY,
-            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
-        ),
+        cv.Optional(key): binary_sensor.binary_sensor_schema(**kwargs)
+        for key, kwargs in BINARY_SENSOR_DEFS.items()
     }
 )
 
 
 async def to_code(config):
     hub = await cg.get_variable(config[CONF_JK_BALANCER_ID])
-    for key in BINARY_SENSORS:
+    for key in BINARY_SENSOR_DEFS:
         if key in config:
             conf = config[key]
-            sens = cg.new_Pvariable(conf[CONF_ID])
-            await binary_sensor.register_binary_sensor(sens, conf)
+            sens = await binary_sensor.new_binary_sensor(conf)
             cg.add(getattr(hub, f"set_{key}_binary_sensor")(sens))

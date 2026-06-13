@@ -2,7 +2,6 @@ import esphome.codegen as cg
 from esphome.components import number
 import esphome.config_validation as cv
 from esphome.const import (
-    CONF_ID,
     CONF_MAX_VALUE,
     CONF_MIN_VALUE,
     CONF_MODE,
@@ -12,6 +11,7 @@ from esphome.const import (
     ICON_EMPTY,
     UNIT_EMPTY,
     UNIT_MILLIAMP,
+    UNIT_MILLIVOLT,
 )
 
 from .. import CONF_JK_BALANCER_ID, JK_BALANCER_COMPONENT_SCHEMA, jk_balancer_ns
@@ -19,8 +19,6 @@ from .. import CONF_JK_BALANCER_ID, JK_BALANCER_COMPONENT_SCHEMA, jk_balancer_ns
 DEPENDENCIES = ["jk_balancer"]
 
 CODEOWNERS = ["@syssi"]
-
-UNIT_MILLIVOLT = "mV"
 
 CONF_CELL_COUNT = "cell_count"
 CONF_BALANCE_TRIGGER_VOLTAGE = "balance_trigger_voltage"
@@ -89,15 +87,13 @@ async def to_code(config):
     for key, address in NUMBERS.items():
         if key in config:
             conf = config[key]
-            var = cg.new_Pvariable(conf[CONF_ID])
-            await cg.register_component(var, conf)
-            await number.register_number(
-                var,
+            var = await number.new_number(
                 conf,
                 min_value=conf[CONF_MIN_VALUE],
                 max_value=conf[CONF_MAX_VALUE],
                 step=conf[CONF_STEP],
             )
+            await cg.register_component(var, conf)
             cg.add(getattr(hub, f"set_{key}_number")(var))
             cg.add(var.set_parent(hub))
             cg.add(var.set_holding_register(address))

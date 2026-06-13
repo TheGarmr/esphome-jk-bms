@@ -1,7 +1,7 @@
 import esphome.codegen as cg
 from esphome.components import text_sensor
 import esphome.config_validation as cv
-from esphome.const import CONF_ID, ICON_TIMELAPSE
+from esphome.const import ENTITY_CATEGORY_DIAGNOSTIC, ICON_TIMELAPSE
 
 from . import CONF_HELTEC_BALANCER_BLE_ID, HELTEC_BALANCER_BLE_COMPONENT_SCHEMA
 
@@ -29,19 +29,21 @@ TEXT_SENSORS = [
 CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
     {
         cv.Optional(CONF_ERRORS): text_sensor.text_sensor_schema(
-            text_sensor.TextSensor, icon=ICON_ERRORS
+            icon=ICON_ERRORS,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
         cv.Optional(CONF_OPERATION_STATUS): text_sensor.text_sensor_schema(
-            text_sensor.TextSensor, icon=ICON_OPERATION_STATUS
+            icon=ICON_OPERATION_STATUS
         ),
         cv.Optional(CONF_TOTAL_RUNTIME_FORMATTED): text_sensor.text_sensor_schema(
-            text_sensor.TextSensor, icon=ICON_TIMELAPSE
+            icon=ICON_TIMELAPSE
         ),
         cv.Optional(CONF_BUZZER_MODE): text_sensor.text_sensor_schema(
-            text_sensor.TextSensor, icon=ICON_OPERATION_STATUS
+            icon=ICON_OPERATION_STATUS
         ),
         cv.Optional(CONF_BATTERY_TYPE): text_sensor.text_sensor_schema(
-            text_sensor.TextSensor, icon=ICON_OPERATION_STATUS
+            icon=ICON_OPERATION_STATUS,
+            entity_category=ENTITY_CATEGORY_DIAGNOSTIC,
         ),
     }
 )
@@ -52,6 +54,5 @@ async def to_code(config):
     for key in TEXT_SENSORS:
         if key in config:
             conf = config[key]
-            sens = cg.new_Pvariable(conf[CONF_ID])
-            await text_sensor.register_text_sensor(sens, conf)
+            sens = await text_sensor.new_text_sensor(conf)
             cg.add(getattr(hub, f"set_{key}_text_sensor")(sens))

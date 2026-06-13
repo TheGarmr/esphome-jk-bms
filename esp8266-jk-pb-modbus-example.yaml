@@ -7,11 +7,11 @@ substitutions:
 
 esphome:
   name: ${name}
+  friendly_name: ${name}
   comment: ${device_description}
-  min_version: 2024.6.0
   project:
     name: "syssi.esphome-jk-bms"
-    version: 2.3.0
+    version: 3.0.0
 
 esp8266:
   board: d1_mini
@@ -19,6 +19,7 @@ esp8266:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  min_auth_mode: WPA2
 
 ota:
   platform: esphome
@@ -68,7 +69,7 @@ sensor:
   # 0x128A   138    INT16    2    R    TempMos         0.1 °C
   - platform: modbus_controller
     modbus_controller_id: bms0
-    name: "${name} mosfet temperature"
+    name: "mosfet temperature"
     address: 0x128A
     register_type: holding
     value_type: S_WORD
@@ -81,7 +82,7 @@ sensor:
   # 0x1290   144   UINT32    4    R    BatVol          mV
   - platform: modbus_controller
     modbus_controller_id: bms0
-    name: "${name} total voltage"
+    name: "total voltage"
     address: 0x1290
     register_type: holding
     value_type: U_DWORD
@@ -94,7 +95,7 @@ sensor:
 
   - platform: modbus_controller
     modbus_controller_id: bms0
-    name: "${name} total runtime in seconds"
+    name: "total runtime in seconds"
     address: 0x12BC
     register_type: holding
     value_type: U_DWORD

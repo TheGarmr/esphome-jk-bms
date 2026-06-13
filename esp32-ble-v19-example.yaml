@@ -1,0 +1,443 @@
+substitutions:
+  name: jk-bms
+  device_description: "Monitor and control a JK-BMS v19 via bluetooth"
+  external_components_source: github://syssi/esphome-jk-bms@main
+  # Please use "JK02_24S" if you own a old JK-BMS < hardware version 11.0 (hardware version >= 6.0 and < 11.0)
+  # Please use "JK02_32S" if you own a new JK-BMS >= hardware version 11.0 (f.e. JK-B2A8S20P hw 11.XW, sw 11.26)
+  # Please use "JK04" if you have some old JK-BMS <= hardware version 3.0 (f.e. JK-B2A16S hw 3.0, sw. 3.3.0)
+  protocol_version: JK02_32S
+
+esphome:
+  name: ${name}
+  friendly_name: ${name}
+  comment: ${device_description}
+  project:
+    name: "syssi.esphome-jk-bms"
+    version: 3.0.0
+
+esp32:
+  board: wemos_d1_mini32
+  framework:
+    type: esp-idf
+
+external_components:
+  - source: ${external_components_source}
+    refresh: 0s
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  min_auth_mode: WPA2
+
+ota:
+  platform: esphome
+  on_begin:
+    then:
+      - switch.turn_off: ble_client_switch0
+      - logger.log: "BLE connection suspended for OTA update"
+
+logger:
+  level: DEBUG
+  logs:
+    esp32_ble_tracker: INFO
+    esp32_ble_client: INFO
+
+# If you don't use Home Assistant please remove this `api` section and uncomment the `mqtt` component!
+api:
+
+# mqtt:
+#   broker: !secret mqtt_host
+#   username: !secret mqtt_username
+#   password: !secret mqtt_password
+#   id: mqtt_client
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+ble_client:
+  - mac_address: !secret bms0_mac_address
+    id: client0
+
+jk_bms_ble:
+  - ble_client_id: client0
+    protocol_version: ${protocol_version}
+    throttle: 5s
+    id: bms0
+
+binary_sensor:
+  - platform: jk_bms_ble
+    balancing:
+      name: "balancing"
+    charging:
+      name: "charging"
+    discharging:
+      name: "discharging"
+    heating:
+      name: "heating"
+    online_status:
+      name: "online status"
+    dry_contact_1:
+      name: "dry contact 1"
+    dry_contact_2:
+      name: "dry contact 2"
+
+button:
+  - platform: jk_bms_ble
+    retrieve_settings:
+      name: "retrieve settings"
+    retrieve_device_info:
+      name: "retrieve device info"
+    retrieve_logbook:
+      name: "retrieve logbook"
+    shutdown:
+      name: "shutdown"
+    restart:
+      name: "restart"
+    factory_reset:
+      name: "factory reset"
+
+number:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    balance_trigger_voltage:
+      name: "balance trigger voltage"
+    cell_count:
+      name: "cell count"
+    total_battery_capacity:
+      name: "total battery capacity"
+    cell_voltage_overvoltage_protection:
+      name: "cell voltage overvoltage protection"
+    cell_voltage_overvoltage_recovery:
+      name: "cell voltage overvoltage recovery"
+    cell_voltage_undervoltage_protection:
+      name: "cell voltage undervoltage protection"
+    cell_voltage_undervoltage_recovery:
+      name: "cell voltage undervoltage recovery"
+    balancing_start_voltage:
+      name: "balancing start voltage"
+    voltage_calibration:
+      name: "voltage calibration"
+    current_calibration:
+      name: "current calibration"
+    power_off_voltage:
+      name: "power off voltage"
+    max_balance_current:
+      name: "max balance current"
+    max_charge_current:
+      name: "max charge current"
+    max_discharge_current:
+      name: "max discharge current"
+    smart_sleep_voltage:
+      name: "smart sleep voltage"
+    smart_sleep_delay:
+      name: "smart sleep delay"
+    emergency_duration:
+      name: "emergency duration"
+    cell_soc100_voltage:
+      name: "cell soc100 voltage"
+    cell_soc0_voltage:
+      name: "cell soc0 voltage"
+    cell_request_charge_voltage:
+      name: "cell request charge voltage"
+    cell_request_float_voltage:
+      name: "cell request float voltage"
+    cell_request_charge_voltage_time:
+      name: "cell request charge voltage time"
+    cell_request_float_voltage_time:
+      name: "cell request float voltage time"
+    re_bulk_soc:
+      name: "re-bulk soc"
+    charge_overcurrent_protection_delay:
+      name: "charge overcurrent protection delay"
+    charge_overcurrent_protection_recovery_time:
+      name: "charge overcurrent protection recovery time"
+    discharge_overcurrent_protection_delay:
+      name: "discharge overcurrent protection delay"
+    discharge_overcurrent_protection_recovery_time:
+      name: "discharge overcurrent protection recovery time"
+    short_circuit_protection_delay:
+      name: "short circuit protection delay"
+    short_circuit_protection_recovery_time:
+      name: "short circuit protection recovery time"
+    charge_overtemperature_protection:
+      name: "charge overtemperature protection"
+    charge_overtemperature_protection_recovery:
+      name: "charge overtemperature protection recovery"
+    discharge_overtemperature_protection:
+      name: "discharge overtemperature protection"
+    discharge_overtemperature_protection_recovery:
+      name: "discharge overtemperature protection recovery"
+    charge_undertemperature_protection:
+      name: "charge undertemperature protection"
+    charge_undertemperature_protection_recovery:
+      name: "charge undertemperature protection recovery"
+    discharge_undertemperature_protection:
+      name: "discharge undertemperature protection"
+    discharge_undertemperature_protection_recovery:
+      name: "discharge undertemperature protection recovery"
+    mosfet_overtemperature_protection:
+      name: "mosfet overtemperature protection"
+    mosfet_overtemperature_protection_recovery:
+      name: "mosfet overtemperature protection recovery"
+    discharge_precharge_time:
+      name: "discharge precharge time"
+    heating_start_temperature:
+      name: "heating start temperature"
+    heating_stop_temperature:
+      name: "heating stop temperature"
+
+sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms0
+    min_cell_voltage:
+      name: "min cell voltage"
+    max_cell_voltage:
+      name: "max cell voltage"
+    min_voltage_cell:
+      name: "min voltage cell"
+    max_voltage_cell:
+      name: "max voltage cell"
+    delta_cell_voltage:
+      name: "delta cell voltage"
+    average_cell_voltage:
+      name: "average cell voltage"
+    cell_voltage_1:
+      name: "cell voltage 1"
+    cell_voltage_2:
+      name: "cell voltage 2"
+    cell_voltage_3:
+      name: "cell voltage 3"
+    cell_voltage_4:
+      name: "cell voltage 4"
+    cell_voltage_5:
+      name: "cell voltage 5"
+    cell_voltage_6:
+      name: "cell voltage 6"
+    cell_voltage_7:
+      name: "cell voltage 7"
+    cell_voltage_8:
+      name: "cell voltage 8"
+    cell_voltage_9:
+      name: "cell voltage 9"
+    cell_voltage_10:
+      name: "cell voltage 10"
+    cell_voltage_11:
+      name: "cell voltage 11"
+    cell_voltage_12:
+      name: "cell voltage 12"
+    cell_voltage_13:
+      name: "cell voltage 13"
+    cell_voltage_14:
+      name: "cell voltage 14"
+    cell_voltage_15:
+      name: "cell voltage 15"
+    cell_voltage_16:
+      name: "cell voltage 16"
+    cell_voltage_17:
+      name: "cell voltage 17"
+    cell_voltage_18:
+      name: "cell voltage 18"
+    cell_voltage_19:
+      name: "cell voltage 19"
+    cell_voltage_20:
+      name: "cell voltage 20"
+    cell_voltage_21:
+      name: "cell voltage 21"
+    cell_voltage_22:
+      name: "cell voltage 22"
+    cell_voltage_23:
+      name: "cell voltage 23"
+    cell_voltage_24:
+      name: "cell voltage 24"
+    cell_resistance_1:
+      name: "cell resistance 1"
+    cell_resistance_2:
+      name: "cell resistance 2"
+    cell_resistance_3:
+      name: "cell resistance 3"
+    cell_resistance_4:
+      name: "cell resistance 4"
+    cell_resistance_5:
+      name: "cell resistance 5"
+    cell_resistance_6:
+      name: "cell resistance 6"
+    cell_resistance_7:
+      name: "cell resistance 7"
+    cell_resistance_8:
+      name: "cell resistance 8"
+    cell_resistance_9:
+      name: "cell resistance 9"
+    cell_resistance_10:
+      name: "cell resistance 10"
+    cell_resistance_11:
+      name: "cell resistance 11"
+    cell_resistance_12:
+      name: "cell resistance 12"
+    cell_resistance_13:
+      name: "cell resistance 13"
+    cell_resistance_14:
+      name: "cell resistance 14"
+    cell_resistance_15:
+      name: "cell resistance 15"
+    cell_resistance_16:
+      name: "cell resistance 16"
+    cell_resistance_17:
+      name: "cell resistance 17"
+    cell_resistance_18:
+      name: "cell resistance 18"
+    cell_resistance_19:
+      name: "cell resistance 19"
+    cell_resistance_20:
+      name: "cell resistance 20"
+    cell_resistance_21:
+      name: "cell resistance 21"
+    cell_resistance_22:
+      name: "cell resistance 22"
+    cell_resistance_23:
+      name: "cell resistance 23"
+    cell_resistance_24:
+      name: "cell resistance 24"
+    total_voltage:
+      name: "total voltage"
+    current:
+      name: "current"
+    heating_current:
+      name: "heating current"
+    power:
+      name: "power"
+    charging_power:
+      name: "charging power"
+    discharging_power:
+      name: "discharging power"
+    temperature_sensor_1:
+      name: "temperature sensor 1"
+    temperature_sensor_2:
+      name: "temperature sensor 2"
+    temperature_sensor_3:
+      name: "temperature sensor 3"
+    temperature_sensor_4:
+      name: "temperature sensor 4"
+    temperature_sensor_5:
+      name: "temperature sensor 5"
+    mosfet_temperature:
+      name: "mosfet temperature"
+    balancer_status_bitmask:
+      name: "balancer status bitmask"
+    state_of_charge:
+      name: "state of charge"
+    state_of_health:
+      name: "state of health"
+    capacity_remaining:
+      name: "capacity remaining"
+    full_charge_capacity:
+      name: "full charge capacity"
+    charging_cycles:
+      name: "charging cycles"
+    total_charging_cycle_capacity:
+      name: "total charging cycle capacity"
+    total_runtime:
+      name: "total runtime"
+    balancing_current:
+      name: "balancing current"
+    emergency_time_countdown:
+      name: "emergency time countdown"
+    smart_sleep_countdown:
+      name: "smart sleep countdown"
+    charge_status_id:
+      name: "charge status id"
+    charge_status_time_elapsed:
+      name: "charge status time elapsed"
+    detail_log_entry_count:
+      name: "detail log entry count"
+    battery_type_id:
+      name: "battery type id"
+    uart1_protocols_enabled_bitmask:
+      name: "uart1 protocols enabled bitmask"
+    uart2_protocols_enabled_bitmask:
+      name: "uart2 protocols enabled bitmask"
+    uart3_protocols_enabled_bitmask:
+      name: "uart3 protocols enabled bitmask"
+    can_protocols_enabled_bitmask:
+      name: "can protocols enabled bitmask"
+switch:
+  - platform: jk_bms_ble
+    charging:
+      name: "charging"
+    discharging:
+      name: "discharging"
+    balancer:
+      name: "balancer"
+    emergency:
+      name: "emergency"
+    heating:
+      name: "heating"
+    disable_temperature_sensors:
+      name: "disable temperature sensors"
+    display_always_on:
+      name: "display always on"
+    smart_sleep:
+      name: "smart sleep"
+    disable_pcl_module:
+      name: "disable pcl module"
+    timed_stored_data:
+      name: "timed stored data"
+    charging_float_mode:
+      name: "charging float mode"
+    emergency_button_trigger:
+      name: "emergency button trigger"
+    dry_contact_alarm_intermittent:
+      name: "dry contact alarm intermittent"
+    discharge_overcurrent_protection_2:
+      name: "discharge overcurrent protection 2"
+    discharge_overcurrent_protection_3:
+      name: "discharge overcurrent protection 3"
+    gps_locked_charging:
+      name: "gps locked charging"
+    gps_locked_discharging:
+      name: "gps locked discharging"
+
+  - platform: ble_client
+    ble_client_id: client0
+    name: "enable bluetooth connection"
+    id: ble_client_switch0
+
+select:
+  - platform: jk_bms_ble
+    uart1_protocol:
+      name: "uart1 protocol"
+    uart2_protocol:
+      name: "uart2 protocol"
+    uart3_protocol:
+      name: "uart3 protocol"
+    can_protocol:
+      name: "can protocol"
+    lcd_buzzer_trigger:
+      name: "lcd buzzer trigger"
+    dry1_trigger:
+      name: "dry1 trigger"
+    dry2_trigger:
+      name: "dry2 trigger"
+    multiplexed_port_mode:
+      name: "protocol mode"
+    load_config_preset:
+      name: "load config preset"
+
+text_sensor:
+  - platform: jk_bms_ble
+    errors:
+      name: "errors"
+    errors_bitmask_hex:
+      name: "errors bitmask hex"
+    balancer_status:
+      name: "balancer status"
+    total_runtime_formatted:
+      name: "total runtime formatted"
+    charge_status:
+      name: "charge status"
+    software_version:
+      name: "software version"
+    hardware_version:
+      name: "hardware version"
+    battery_type:
+      name: "battery type"

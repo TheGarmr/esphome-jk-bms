@@ -2,7 +2,6 @@ import esphome.codegen as cg
 from esphome.components import number
 import esphome.config_validation as cv
 from esphome.const import (
-    CONF_ID,
     CONF_MAX_VALUE,
     CONF_MIN_VALUE,
     CONF_MODE,
@@ -14,10 +13,18 @@ from esphome.const import (
     UNIT_CELSIUS,
     UNIT_EMPTY,
     UNIT_HOUR,
+    UNIT_MINUTE,
+    UNIT_PERCENT,
+    UNIT_SECOND,
     UNIT_VOLT,
 )
 
-from .. import CONF_JK_BMS_BLE_ID, JK_BMS_BLE_COMPONENT_SCHEMA, jk_bms_ble_ns
+from .. import (
+    CONF_JK_BMS_BLE_ID,
+    JK_BMS_BLE_COMPONENT_SCHEMA,
+    deprecated_renames,
+    jk_bms_ble_ns,
+)
 
 DEPENDENCIES = ["jk_bms_ble"]
 
@@ -127,6 +134,7 @@ DEFAULT_STEP = 1
 # ...
 # b3 01 14        Requested charge voltage time    2.0 h (20)
 # b4 01 5a        Requested float voltage time     9.0 h (90)
+# b7 01 00        Re-Bulk SOC                        0 % (0)
 
 # https://github.com/syssi/esphome-jk-bms/issues/276#issuecomment-1468145528
 
@@ -142,11 +150,12 @@ CONF_CELL_REQUEST_CHARGE_VOLTAGE = "cell_request_charge_voltage"
 CONF_CELL_REQUEST_FLOAT_VOLTAGE = "cell_request_float_voltage"
 CONF_CELL_REQUEST_CHARGE_VOLTAGE_TIME = "cell_request_charge_voltage_time"
 CONF_CELL_REQUEST_FLOAT_VOLTAGE_TIME = "cell_request_float_voltage_time"
+CONF_RE_BULK_SOC = "re_bulk_soc"
 
 CONF_CELL_COUNT = "cell_count"
 CONF_TOTAL_BATTERY_CAPACITY = "total_battery_capacity"
 
-CONF_BALANCE_STARTING_VOLTAGE = "balance_starting_voltage"
+CONF_BALANCING_START_VOLTAGE = "balancing_start_voltage"
 CONF_VOLTAGE_CALIBRATION = "voltage_calibration"
 CONF_CURRENT_CALIBRATION = "current_calibration"
 CONF_POWER_OFF_VOLTAGE = "power_off_voltage"
@@ -176,124 +185,89 @@ CONF_CHARGE_UNDERTEMPERATURE_PROTECTION = "charge_undertemperature_protection"
 CONF_CHARGE_UNDERTMPERATURE_PROTECTION_RECOVERY = (
     "charge_undertemperature_protection_recovery"
 )
-CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION = "power_tube_overtemperature_protection"
-CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION_RECOVERY = (
-    "power_tube_overtemperature_protection_recovery"
+CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION = "discharge_undertemperature_protection"
+CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION_RECOVERY = (
+    "discharge_undertemperature_protection_recovery"
+)
+CONF_MOSFET_OVERTEMPERATURE_PROTECTION = "mosfet_overtemperature_protection"
+CONF_MOSFET_OVERTEMPERATURE_PROTECTION_RECOVERY = (
+    "mosfet_overtemperature_protection_recovery"
 )
 CONF_DISCHARGE_PRECHARGE_TIME = "discharge_precharge_time"
 CONF_HEATING_START_TEMPERATURE = "heating_start_temperature"
 CONF_HEATING_STOP_TEMPERATURE = "heating_stop_temperature"
+CONF_SMART_SLEEP_DELAY = "smart_sleep_delay"
+CONF_EMERGENCY_DURATION = "emergency_duration"
 
 UNIT_AMPERE_HOUR = "Ah"
-UNIT_SECONDS = "s"
 UNIT_MICROSECONDS = "μs"
 
 NUMBERS = {
-    # JK04, JK02_24S, JK02_32S, factor, length
-    CONF_SMART_SLEEP_VOLTAGE: [0x00, 0x01, 0x01, 1000.0, 1],
-    CONF_CELL_VOLTAGE_UNDERVOLTAGE_PROTECTION: [0x00, 0x02, 0x02, 1000.0, 4],
-    CONF_CELL_VOLTAGE_UNDERVOLTAGE_RECOVERY: [0x00, 0x03, 0x03, 1000.0, 4],
-    CONF_CELL_VOLTAGE_OVERVOLTAGE_PROTECTION: [0x00, 0x04, 0x04, 1000.0, 4],
-    CONF_CELL_VOLTAGE_OVERVOLTAGE_RECOVERY: [0x00, 0x05, 0x05, 1000.0, 4],
-    CONF_BALANCE_TRIGGER_VOLTAGE: [0x00, 0x06, 0x06, 1000.0, 4],
-    CONF_CELL_SOC100_VOLTAGE: [0x00, 0x07, 0x07, 1000.0, 4],
-    CONF_CELL_SOC0_VOLTAGE: [0x00, 0x08, 0x08, 1000.0, 4],
-    CONF_CELL_REQUEST_CHARGE_VOLTAGE: [0x00, 0x09, 0x09, 1000.0, 4],
-    CONF_CELL_REQUEST_FLOAT_VOLTAGE: [0x00, 0x0A, 0x0A, 1000.0, 4],
-    CONF_CELL_REQUEST_CHARGE_VOLTAGE_TIME: [0x00, 0x00, 0xB3, 10.0, 1],
-    CONF_CELL_REQUEST_FLOAT_VOLTAGE_TIME: [0x00, 0x00, 0xB4, 10.0, 1],
-    CONF_CELL_COUNT: [0x00, 0x1C, 0x1C, 1.0, 4],
-    CONF_TOTAL_BATTERY_CAPACITY: [0x00, 0x20, 0x20, 1000.0, 4],
-    CONF_BALANCE_STARTING_VOLTAGE: [0x00, 0x26, 0x22, 1000.0, 4],
-    CONF_VOLTAGE_CALIBRATION: [0x00, 0x21, 0x64, 1000.0, 4],
-    CONF_CURRENT_CALIBRATION: [0x00, 0x24, 0x67, 1000.0, 4],
-    CONF_POWER_OFF_VOLTAGE: [0x00, 0x0B, 0x0B, 1000.0, 4],
-    CONF_MAX_BALANCE_CURRENT: [0x00, 0x13, 0x13, 1000.0, 4],
-    CONF_MAX_CHARGE_CURRENT: [0x00, 0x0C, 0x0C, 1000.0, 4],
-    CONF_MAX_DISCHARGE_CURRENT: [0x00, 0x0F, 0x0F, 1000.0, 4],
-    CONF_CHARGE_OVERCURRENT_PROTECTION_DELAY: [0x00, 0x0D, 0x0D, 1.0, 4],
-    CONF_CHARGE_OVERCURRENT_PROTECTION_RECOVERY_TIME: [
-        0x00,
-        0x0E,
-        0x0E,
-        1.0,
+    # JK04, JK02_24S, JK02_32S, factor, length, jk04_length
+    CONF_SMART_SLEEP_VOLTAGE: [0x00, 0x01, 0x01, 1000.0, 1, 0],
+    CONF_CELL_VOLTAGE_UNDERVOLTAGE_PROTECTION: [0x00, 0x02, 0x02, 1000.0, 4, 0],
+    CONF_CELL_VOLTAGE_UNDERVOLTAGE_RECOVERY: [0x00, 0x03, 0x03, 1000.0, 4, 0],
+    CONF_CELL_VOLTAGE_OVERVOLTAGE_PROTECTION: [0x00, 0x04, 0x04, 1000.0, 4, 0],
+    CONF_CELL_VOLTAGE_OVERVOLTAGE_RECOVERY: [0x00, 0x05, 0x05, 1000.0, 4, 0],
+    CONF_BALANCE_TRIGGER_VOLTAGE: [
+        0x64,
+        0x06,
+        0x06,
+        1000.0,
         4,
-    ],
-    CONF_DISCHARGE_OVERCURRENT_PROTECTION_DELAY: [
-        0x00,
-        0x10,
-        0x10,
-        1.0,
         4,
-    ],
-    CONF_DISCHARGE_OVERCURRENT_PROTECTION_RECOVERY_TIME: [
-        0x00,
-        0x11,
-        0x11,
-        1.0,
+    ],  # JK04: [0.002...1.0] V
+    CONF_CELL_SOC100_VOLTAGE: [0x00, 0x07, 0x07, 1000.0, 4, 0],
+    CONF_CELL_SOC0_VOLTAGE: [0x00, 0x08, 0x08, 1000.0, 4, 0],
+    CONF_CELL_REQUEST_CHARGE_VOLTAGE: [0x00, 0x09, 0x09, 1000.0, 4, 0],
+    CONF_CELL_REQUEST_FLOAT_VOLTAGE: [0x00, 0x0A, 0x0A, 1000.0, 4, 0],
+    CONF_CELL_REQUEST_CHARGE_VOLTAGE_TIME: [0x00, 0x00, 0xB3, 10.0, 1, 0],
+    CONF_CELL_REQUEST_FLOAT_VOLTAGE_TIME: [0x00, 0x00, 0xB4, 10.0, 1, 0],
+    CONF_RE_BULK_SOC: [0x00, 0x00, 0xB7, 1.0, 1, 0],
+    CONF_CELL_COUNT: [0x1C, 0x1C, 0x1C, 1.0, 4, 2],  # JK04: uint16 (len=2); [1...24]
+    CONF_TOTAL_BATTERY_CAPACITY: [0x00, 0x20, 0x20, 1000.0, 4, 0],
+    CONF_BALANCING_START_VOLTAGE: [
+        0x58,
+        0x26,
+        0x22,
+        1000.0,
         4,
-    ],
-    CONF_SHORT_CIRCUIT_PROTECTION_DELAY: [0x00, 0x25, 0x21, 1.0, 4],
-    CONF_SHORT_CIRCUIT_PROTECTION_RECOVERY_TIME: [
-        0x00,
-        0x12,
-        0x12,
-        1.0,
         4,
-    ],
-    CONF_CHARGE_OVERTEMPERATURE_PROTECTION: [0x00, 0x14, 0x14, 10.0, 4],
-    CONF_CHARGE_OVERTMPERATURE_PROTECTION_RECOVERY: [
-        0x00,
-        0x15,
-        0x15,
-        10.0,
+    ],  # JK04: [1.0...4.20] V
+    CONF_VOLTAGE_CALIBRATION: [
+        0x44,
+        0x21,
+        0x64,
+        1000.0,
         4,
-    ],
-    CONF_DISCHARGE_OVERTEMPERATURE_PROTECTION: [
-        0x00,
-        0x16,
-        0x16,
-        10.0,
         4,
-    ],
-    CONF_DISCHARGE_OVERTEMPERATURE_PROTECTION_RECOVERY: [
-        0x00,
-        0x17,
-        0x17,
-        10.0,
-        4,
-    ],
-    CONF_CHARGE_UNDERTEMPERATURE_PROTECTION: [
-        0x00,
-        0x18,
-        0x18,
-        10.0,
-        4,
-    ],
-    CONF_CHARGE_UNDERTMPERATURE_PROTECTION_RECOVERY: [
-        0x00,
-        0x19,
-        0x19,
-        10.0,
-        4,
-    ],
-    CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION: [
-        0x00,
-        0x1A,
-        0x1A,
-        10.0,
-        4,
-    ],
-    CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION_RECOVERY: [
-        0x00,
-        0x1B,
-        0x1B,
-        10.0,
-        4,
-    ],
-    CONF_DISCHARGE_PRECHARGE_TIME: [0x00, 0x00, 0x25, 1.0, 4],
-    CONF_HEATING_START_TEMPERATURE: [0x00, 0x00, 0x37, 1.0, 1],
-    CONF_HEATING_STOP_TEMPERATURE: [0x00, 0x00, 0x38, 1.0, 1],
+    ],  # JK04: raw Vref [2.80...3.20] V (app displays pack voltage [48.868...55.849] V for 16S)
+    CONF_CURRENT_CALIBRATION: [0x00, 0x24, 0x67, 1000.0, 4, 0],
+    CONF_POWER_OFF_VOLTAGE: [0x20, 0x0B, 0x0B, 1000.0, 4, 4],  # JK04: [2.0...3.700] V
+    CONF_MAX_BALANCE_CURRENT: [0x68, 0x13, 0x13, 1000.0, 4, 4],  # JK04: [0.1...10.0] A
+    CONF_MAX_CHARGE_CURRENT: [0x00, 0x0C, 0x0C, 1000.0, 4, 0],
+    CONF_MAX_DISCHARGE_CURRENT: [0x00, 0x0F, 0x0F, 1000.0, 4, 0],
+    CONF_CHARGE_OVERCURRENT_PROTECTION_DELAY: [0x00, 0x0D, 0x0D, 1.0, 4, 0],
+    CONF_CHARGE_OVERCURRENT_PROTECTION_RECOVERY_TIME: [0x00, 0x0E, 0x0E, 1.0, 4, 0],
+    CONF_DISCHARGE_OVERCURRENT_PROTECTION_DELAY: [0x00, 0x10, 0x10, 1.0, 4, 0],
+    CONF_DISCHARGE_OVERCURRENT_PROTECTION_RECOVERY_TIME: [0x00, 0x11, 0x11, 1.0, 4, 0],
+    CONF_SHORT_CIRCUIT_PROTECTION_DELAY: [0x00, 0x25, 0x21, 1.0, 4, 0],
+    CONF_SHORT_CIRCUIT_PROTECTION_RECOVERY_TIME: [0x00, 0x12, 0x12, 1.0, 4, 0],
+    CONF_CHARGE_OVERTEMPERATURE_PROTECTION: [0x00, 0x14, 0x14, 10.0, 4, 0],
+    CONF_CHARGE_OVERTMPERATURE_PROTECTION_RECOVERY: [0x00, 0x15, 0x15, 10.0, 4, 0],
+    CONF_DISCHARGE_OVERTEMPERATURE_PROTECTION: [0x00, 0x16, 0x16, 10.0, 4, 0],
+    CONF_DISCHARGE_OVERTEMPERATURE_PROTECTION_RECOVERY: [0x00, 0x17, 0x17, 10.0, 4, 0],
+    CONF_CHARGE_UNDERTEMPERATURE_PROTECTION: [0x00, 0x18, 0x18, 10.0, 4, 0],
+    CONF_CHARGE_UNDERTMPERATURE_PROTECTION_RECOVERY: [0x00, 0x19, 0x19, 10.0, 4, 0],
+    CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION: [0x00, 0x00, 0x3A, 1.0, 1, 0],
+    CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION_RECOVERY: [0x00, 0x00, 0x3B, 1.0, 1, 0],
+    CONF_MOSFET_OVERTEMPERATURE_PROTECTION: [0x00, 0x1A, 0x1A, 10.0, 4, 0],
+    CONF_MOSFET_OVERTEMPERATURE_PROTECTION_RECOVERY: [0x00, 0x1B, 0x1B, 10.0, 4, 0],
+    CONF_DISCHARGE_PRECHARGE_TIME: [0x00, 0x00, 0x25, 1.0, 4, 0],
+    CONF_HEATING_START_TEMPERATURE: [0x00, 0x00, 0x37, 1.0, 1, 0],
+    CONF_HEATING_STOP_TEMPERATURE: [0x00, 0x00, 0x38, 1.0, 1, 0],
+    CONF_SMART_SLEEP_DELAY: [0x00, 0x00, 0x39, 1.0, 1, 0],
+    CONF_EMERGENCY_DURATION: [0x00, 0x00, 0xB5, 1.0, 1, 0],
 }
 
 JkNumber = jk_bms_ble_ns.class_("JkNumber", number.Number, cg.Component)
@@ -316,7 +290,13 @@ JK_NUMBER_SCHEMA = (
     .extend(cv.COMPONENT_SCHEMA)
 )
 
-CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
+_RENAMED_NUMBERS = {
+    "power_tube_overtemperature_protection": "mosfet_overtemperature_protection",
+    "power_tube_overtemperature_protection_recovery": "mosfet_overtemperature_protection_recovery",
+    "balance_starting_voltage": "balancing_start_voltage",
+}
+
+_NUMBER_CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
     {
         cv.Optional(CONF_SMART_SLEEP_VOLTAGE): JK_NUMBER_SCHEMA.extend(
             {
@@ -391,7 +371,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_CELL_REQUEST_CHARGE_VOLTAGE_TIME): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=25.5): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=18.2): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_HOUR
@@ -401,17 +381,27 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_CELL_REQUEST_FLOAT_VOLTAGE_TIME): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=25.5): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=18.2): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_HOUR
                 ): cv.string_strict,
             }
         ),
+        cv.Optional(CONF_RE_BULK_SOC): JK_NUMBER_SCHEMA.extend(
+            {
+                cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=50): cv.float_,
+                cv.Optional(CONF_STEP, default=1.0): cv.float_,
+                cv.Optional(
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_PERCENT
+                ): cv.string_strict,
+            }
+        ),
         cv.Optional(CONF_CELL_COUNT): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=2): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=24): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=32): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_EMPTY
@@ -420,15 +410,15 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         ),
         cv.Optional(CONF_TOTAL_BATTERY_CAPACITY): JK_NUMBER_SCHEMA.extend(
             {
-                cv.Optional(CONF_MIN_VALUE, default=5): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=2000): cv.float_,
+                cv.Optional(CONF_MIN_VALUE, default=2): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=20000): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_AMPERE_HOUR
                 ): cv.string_strict,
             }
         ),
-        cv.Optional(CONF_BALANCE_STARTING_VOLTAGE): JK_NUMBER_SCHEMA.extend(
+        cv.Optional(CONF_BALANCING_START_VOLTAGE): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=1.20): cv.float_,
                 cv.Optional(CONF_MAX_VALUE, default=4.25): cv.float_,
@@ -462,7 +452,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_MAX_BALANCE_CURRENT): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=0.3): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=10.0): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=15.0): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_AMPERE
@@ -482,7 +472,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_MAX_DISCHARGE_CURRENT): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=1.0): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=600.1): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=1200.1): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_AMPERE
@@ -495,7 +485,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=600): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
@@ -507,7 +497,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=600): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
@@ -519,7 +509,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=600): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
@@ -531,14 +521,14 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=600): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
         cv.Optional(CONF_SHORT_CIRCUIT_PROTECTION_DELAY): JK_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=0): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=10000000): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=1000000): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_MICROSECONDS
@@ -553,7 +543,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=600): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
@@ -603,7 +593,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
         ),
         cv.Optional(CONF_CHARGE_UNDERTEMPERATURE_PROTECTION): JK_NUMBER_SCHEMA.extend(
             {
-                cv.Optional(CONF_MIN_VALUE, default=-30): cv.float_,
+                cv.Optional(CONF_MIN_VALUE, default=-45): cv.float_,
                 cv.Optional(CONF_MAX_VALUE, default=20): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
@@ -615,7 +605,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
             CONF_CHARGE_UNDERTMPERATURE_PROTECTION_RECOVERY
         ): JK_NUMBER_SCHEMA.extend(
             {
-                cv.Optional(CONF_MIN_VALUE, default=-30): cv.float_,
+                cv.Optional(CONF_MIN_VALUE, default=-45): cv.float_,
                 cv.Optional(CONF_MAX_VALUE, default=20): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
@@ -624,11 +614,33 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
             }
         ),
         cv.Optional(
-            CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION
+            CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION
         ): JK_NUMBER_SCHEMA.extend(
             {
-                cv.Optional(CONF_MIN_VALUE, default=30): cv.float_,
+                cv.Optional(CONF_MIN_VALUE, default=-40): cv.float_,
                 cv.Optional(CONF_MAX_VALUE, default=100): cv.float_,
+                cv.Optional(CONF_STEP, default=1.0): cv.float_,
+                cv.Optional(
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_CELSIUS
+                ): cv.string_strict,
+            }
+        ),
+        cv.Optional(
+            CONF_DISCHARGE_UNDERTEMPERATURE_PROTECTION_RECOVERY
+        ): JK_NUMBER_SCHEMA.extend(
+            {
+                cv.Optional(CONF_MIN_VALUE, default=-40): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=100): cv.float_,
+                cv.Optional(CONF_STEP, default=1.0): cv.float_,
+                cv.Optional(
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_CELSIUS
+                ): cv.string_strict,
+            }
+        ),
+        cv.Optional(CONF_MOSFET_OVERTEMPERATURE_PROTECTION): JK_NUMBER_SCHEMA.extend(
+            {
+                cv.Optional(CONF_MIN_VALUE, default=50): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=110): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_CELSIUS
@@ -636,11 +648,11 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
             }
         ),
         cv.Optional(
-            CONF_POWER_TUBE_OVERTEMPERATURE_PROTECTION_RECOVERY
+            CONF_MOSFET_OVERTEMPERATURE_PROTECTION_RECOVERY
         ): JK_NUMBER_SCHEMA.extend(
             {
-                cv.Optional(CONF_MIN_VALUE, default=30): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=100): cv.float_,
+                cv.Optional(CONF_MIN_VALUE, default=50): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=110): cv.float_,
                 cv.Optional(CONF_STEP, default=0.1): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_CELSIUS
@@ -653,7 +665,7 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 cv.Optional(CONF_MAX_VALUE, default=255.0): cv.float_,
                 cv.Optional(CONF_STEP, default=1.0): cv.float_,
                 cv.Optional(
-                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECONDS
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_SECOND
                 ): cv.string_strict,
             }
         ),
@@ -677,8 +689,30 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
                 ): cv.string_strict,
             }
         ),
+        cv.Optional(CONF_SMART_SLEEP_DELAY): JK_NUMBER_SCHEMA.extend(
+            {
+                cv.Optional(CONF_MIN_VALUE, default=1): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=100): cv.float_,
+                cv.Optional(CONF_STEP, default=1.0): cv.float_,
+                cv.Optional(
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_HOUR
+                ): cv.string_strict,
+            }
+        ),
+        cv.Optional(CONF_EMERGENCY_DURATION): JK_NUMBER_SCHEMA.extend(
+            {
+                cv.Optional(CONF_MIN_VALUE, default=1): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=255): cv.float_,
+                cv.Optional(CONF_STEP, default=1.0): cv.float_,
+                cv.Optional(
+                    CONF_UNIT_OF_MEASUREMENT, default=UNIT_MINUTE
+                ): cv.string_strict,
+            }
+        ),
     }
 )
+
+CONFIG_SCHEMA = cv.All(deprecated_renames(_RENAMED_NUMBERS), _NUMBER_CONFIG_SCHEMA)
 
 
 async def to_code(config):
@@ -686,15 +720,13 @@ async def to_code(config):
     for key, address in NUMBERS.items():
         if key in config:
             conf = config[key]
-            var = cg.new_Pvariable(conf[CONF_ID])
-            await cg.register_component(var, conf)
-            await number.register_number(
-                var,
+            var = await number.new_number(
                 conf,
                 min_value=conf[CONF_MIN_VALUE],
                 max_value=conf[CONF_MAX_VALUE],
                 step=conf[CONF_STEP],
             )
+            await cg.register_component(var, conf)
             cg.add(getattr(hub, f"set_{key}_number")(var))
             cg.add(var.set_parent(hub))
             cg.add(var.set_jk04_holding_register(address[0]))
@@ -702,3 +734,4 @@ async def to_code(config):
             cg.add(var.set_jk02_32s_holding_register(address[2]))
             cg.add(var.set_factor(address[3]))
             cg.add(var.set_length(address[4]))
+            cg.add(var.set_jk04_length(address[5]))

@@ -2,8 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
-namespace esphome {
-namespace jk_bms_display {
+namespace esphome::jk_bms_display {
 
 static const char *const TAG = "jk_bms_display";
 
@@ -38,7 +37,8 @@ bool JkBmsDisplay::parse_jk_bms_display_byte_(uint8_t byte) {
     return true;
 
   if (at == 1) {
-    if (raw[0] != SOF_BYTE1 || raw[1] != SOF_BYTE2) {
+    // Accept 0xA55A and 0x5AA5 preamble
+    if ((raw[0] != SOF_BYTE1 || raw[1] != SOF_BYTE2) && (raw[0] != SOF_BYTE2 || raw[1] != SOF_BYTE1)) {
       ESP_LOGVV(TAG, "Invalid header: 0x%02X 0x%02X", raw[0], raw[1]);
 
       // return false to reset buffer
@@ -100,7 +100,7 @@ void JkBmsDisplay::on_jk_bms_display_status_data_(const std::vector<uint8_t> &da
     return (uint16_t(data[i + 0]) << 8) | (uint16_t(data[i + 1]) << 0);
   };
 
-  ESP_LOGI(TAG, "Status frame (%d bytes) received", data.size());
+  ESP_LOGI(TAG, "Status frame (%zu bytes) received", data.size());
   ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
 
   uint8_t offset = 6;
@@ -217,7 +217,7 @@ void JkBmsDisplay::on_jk_bms_display_raw_data_(const std::vector<uint8_t> &data)
     return (uint16_t(data[i + 0]) << 8) | (uint16_t(data[i + 1]) << 0);
   };
 
-  ESP_LOGD(TAG, "Raw data (%d bytes) received", data.size());
+  ESP_LOGD(TAG, "Raw data (%zu bytes) received", data.size());
   ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
 
   uint16_t address = jk_bms_get_16bit(4);
@@ -309,5 +309,4 @@ void JkBmsDisplay::publish_state_(sensor::Sensor *sensor, float value) {
   sensor->publish_state(value);
 }
 
-}  // namespace jk_bms_display
-}  // namespace esphome
+}  // namespace esphome::jk_bms_display

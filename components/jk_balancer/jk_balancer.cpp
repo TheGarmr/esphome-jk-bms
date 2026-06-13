@@ -2,8 +2,7 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
-namespace esphome {
-namespace jk_balancer {
+namespace esphome::jk_balancer {
 
 static const char *const TAG = "jk_balancer";
 
@@ -15,7 +14,7 @@ static const uint8_t FUNCTION_SET_TRIGGER_VOLTAGE = 0xF2;
 static const uint8_t FUNCTION_SET_MAX_BALANCE_CURRENT = 0xF4;
 
 static const uint8_t ERRORS_SIZE = 3;
-static const char *const ERRORS[ERRORS_SIZE] = {
+static constexpr const char *const ERRORS[ERRORS_SIZE] = {
     "Wrong cell count",
     "Resistance too high",
     "Overvoltage",
@@ -238,7 +237,7 @@ void JkBalancer::publish_state_(text_sensor::TextSensor *text_sensor, const std:
 
 std::string JkBalancer::error_bits_to_string_(const uint8_t mask) {
   bool first = true;
-  std::string errors_list = "";
+  std::string errors_list;
 
   if (mask) {
     for (int i = 0; i < ERRORS_SIZE; i++) {
@@ -300,5 +299,4 @@ void JkBalancer::dump_config() {  // NOLINT(google-readability-function-size,rea
   LOG_TEXT_SENSOR("", "Errors", this->errors_text_sensor_);
 }
 
-}  // namespace jk_balancer
-}  // namespace esphome
+}  // namespace esphome::jk_balancer

@@ -1,11 +1,32 @@
+import logging
+
 import esphome.codegen as cg
 from esphome.components import jk_modbus
 import esphome.config_validation as cv
 from esphome.const import CONF_ID
 
+_LOGGER = logging.getLogger(__name__)
+
 AUTO_LOAD = ["jk_modbus", "binary_sensor", "sensor", "switch", "text_sensor"]
 CODEOWNERS = ["@syssi"]
 MULTI_CONF = True
+
+
+def deprecated_renames(renames: dict[str, str]):
+    def validator(config):
+        config = config.copy()
+        for old, new in renames.items():
+            if old in config:
+                _LOGGER.warning(
+                    "'%s' is deprecated, use '%s' instead. Will be removed in a future release.",
+                    old,
+                    new,
+                )
+                config[new] = config.pop(old)
+        return config
+
+    return validator
+
 
 CONF_JK_BMS_ID = "jk_bms_id"
 
@@ -18,14 +39,15 @@ JK_BMS_COMPONENT_SCHEMA = cv.Schema(
     }
 )
 
-CONFIG_SCHEMA = (
+CONFIG_SCHEMA = cv.All(
+    cv.require_esphome_version(2025, 7, 0),
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(JkBms),
         }
     )
     .extend(cv.polling_component_schema("5s"))
-    .extend(jk_modbus.jk_modbus_device_schema(0x4E))
+    .extend(jk_modbus.jk_modbus_device_schema(0x4E)),
 )
 
 

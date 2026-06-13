@@ -1,15 +1,13 @@
 substitutions:
   name: jk-bms
   device_description: "Occupy the BLE module of the BMS to prevent advertising and block connections from foreign devices"
-  mac_address: C8:47:8C:E1:E2:AA
-
 esphome:
   name: ${name}
+  friendly_name: ${name}
   comment: ${device_description}
-  min_version: 2024.6.0
   project:
     name: "syssi.esphome-jk-bms"
-    version: 2.3.0
+    version: 3.0.0
 
 esp32:
   board: wemos_d1_mini32
@@ -19,6 +17,7 @@ esp32:
 wifi:
   ssid: !secret wifi_ssid
   password: !secret wifi_password
+  min_auth_mode: WPA2
 
 ota:
   platform: esphome
@@ -44,11 +43,11 @@ api:
 esp32_ble_tracker:
 
 ble_client:
-  - mac_address: ${mac_address}
+  - mac_address: !secret bms0_mac_address
     id: client0
 
 switch:
   - platform: ble_client
     ble_client_id: client0
     id: ble_client_switch0
-    name: "${name} enable bluetooth connection"
+    name: "enable bluetooth connection"
