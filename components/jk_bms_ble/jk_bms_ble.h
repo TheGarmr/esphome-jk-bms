@@ -404,6 +404,7 @@ class JkBmsBle :
   void set_multiplexed_port_mode_table(const char *const *entries, size_t count) {
     multiplexed_port_mode_table_ = {entries, count};
   }
+  void set_errors_jk02_table(const char *const *entries, size_t count) { errors_jk02_table_ = {entries, count}; }
 
   void assemble(const uint8_t *data, uint16_t length);
   void set_protocol_version(ProtocolVersion protocol_version) { protocol_version_ = protocol_version; }
@@ -543,6 +544,7 @@ class JkBmsBle :
   LookupTable can_protocol_table_;
   LookupTable lcd_buzzer_trigger_table_;
   LookupTable multiplexed_port_mode_table_;
+  LookupTable errors_jk02_table_;
 
   text_sensor::TextSensor *errors_bitmask_hex_text_sensor_{nullptr};
   text_sensor::TextSensor *errors_text_sensor_{nullptr};
@@ -583,7 +585,7 @@ class JkBmsBle :
   void reset_online_status_tracker_();
   void track_online_status_();
   std::string to_hex_string_(uint32_t mask);
-  std::string error_bits_to_string_(uint32_t bitmask, const char *const *errors, uint8_t errors_size);
+  std::string error_bits_to_string_(uint32_t bitmask, const LookupTable &errors, uint8_t bits);
   std::string charge_status_id_to_string_(uint8_t status);
   std::string battery_type_id_to_string_(uint8_t code);
 

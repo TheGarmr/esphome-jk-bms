@@ -5,6 +5,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import pytest  # noqa: E402
+import voluptuous as vol  # noqa: E402
+
 import components.heltec_balancer_ble as hub_heltec  # noqa: E402
 from components.heltec_balancer_ble import (  # noqa: E402
     binary_sensor as heltec_binary_sensor,
@@ -121,6 +124,70 @@ class TestJkBmsBleSensorLists:
         assert "battery_type_id" in ble_sensor.SENSOR_DEFS
         assert ble_sensor.CONF_POWER_ON_COUNT in ble_sensor.SENSOR_DEFS
         assert len(ble_sensor.SENSOR_DEFS) == 33
+
+
+class TestJkBmsBleErrorOverrides:
+    def test_default_errors_cover_all_32_bits(self):
+        assert len(hub_ble.DEFAULT_ERRORS_JK02) == 32
+
+    def test_default_errors_are_immutable(self):
+        # to_code() patches a copy per hub; a mutable default would let one hub's
+        # error_overrides leak into the next one.
+        assert isinstance(hub_ble.DEFAULT_ERRORS_JK02, tuple)
+
+    def test_default_errors_labels(self):
+        assert hub_ble.DEFAULT_ERRORS_JK02[0] == "Wire resistance"
+        assert hub_ble.DEFAULT_ERRORS_JK02[4] == "Battery is fully charged"
+        assert hub_ble.DEFAULT_ERRORS_JK02[28] == "GPS remote lock"
+
+    def test_unused_bits_are_empty(self):
+        for bit in (3, 29, 30, 31):
+            assert hub_ble.DEFAULT_ERRORS_JK02[bit] == ""
+
+    @staticmethod
+    def _validate(overrides):
+        config = hub_ble.CONFIG_SCHEMA(
+            {
+                "protocol_version": "JK02_32S",
+                "ble_client_id": "client0",
+                "error_overrides": overrides,
+            }
+        )
+        return config["error_overrides"]
+
+    def test_schema_accepts_bit_index_as_string(self):
+        # ESPHome's YAML loader turns every mapping key into a string.
+        assert self._validate({"4": "Cell overvoltage"}) == {4: "Cell overvoltage"}
+
+    def test_schema_accepts_boundary_bits(self):
+        assert self._validate({"0": "a", "31": "b"}) == {0: "a", 31: "b"}
+
+    def test_schema_accepts_empty_label(self):
+        assert self._validate({"4": ""}) == {4: ""}
+
+    def test_schema_accepts_hex_bit_index(self):
+        assert self._validate({"0x1F": "Reserved"}) == {31: "Reserved"}
+
+    def test_schema_rejects_out_of_range_bit(self):
+        with pytest.raises(vol.Invalid, match="Error bit 32 is out of range"):
+            self._validate({"32": "Nope"})
+        with pytest.raises(vol.Invalid, match="Error bit -1 is out of range"):
+            self._validate({"-1": "Nope"})
+
+    def test_schema_rejects_non_numeric_bit(self):
+        with pytest.raises(vol.Invalid, match="'abc' is not a valid error bit"):
+            self._validate({"abc": "Nope"})
+
+    def test_schema_rejects_non_string_label(self):
+        with pytest.raises(vol.Invalid, match="Must be string"):
+            self._validate({"4": 42})
+
+    def test_error_overrides_is_optional(self):
+        config = hub_ble.CONFIG_SCHEMA(
+            {"protocol_version": "JK02_32S", "ble_client_id": "client0"}
+        )
+
+        assert hub_ble.CONF_ERROR_OVERRIDES not in config
 
 
 class TestJkBmsBleBinarySensorConstants:
