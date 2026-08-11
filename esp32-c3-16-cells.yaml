@@ -1,3 +1,4 @@
+#000 — 4G-GPS protocol
 uart:
   - id: uart_0
     baud_rate: 115200
@@ -31,29 +32,6 @@ binary_sensor:
       name: "online status"
 
 sensor:
-# Uptime sensor
-  - platform: uptime
-    name: Uptime Sensor
-    id: uptime_sensor
-    update_interval: 60s
-    on_raw_value:
-      then:
-        - text_sensor.template.publish:
-            id: uptime_human
-            state: !lambda |-
-              int seconds = round(id(uptime_sensor).raw_state);
-              int days = seconds / (24 * 3600);
-              seconds = seconds % (24 * 3600);
-              int hours = seconds / 3600;
-              seconds = seconds % 3600;
-              int minutes = seconds /  60;
-              seconds = seconds % 60;
-              return (
-                (days ? to_string(days) + "d " : "") +
-                (hours ? to_string(hours) + "h " : "") +
-                (minutes ? to_string(minutes) + "m " : "") +
-                (to_string(seconds) + "s")
-              ).c_str();
   - platform: jk_bms
     min_cell_voltage:
       name: "min cell voltage"
@@ -99,7 +77,7 @@ sensor:
       name: "cell voltage 15"
     cell_voltage_16:
       name: "cell voltage 16"
-    power_tube_temperature:
+    mosfet_temperature:
       name: "power tube temperature"
     temperature_sensor_1:
       name: "temperature sensor 1"
@@ -115,17 +93,17 @@ sensor:
       name: "charging power"
     discharging_power:
       name: "discharging power"
-    capacity_remaining:
+    state_of_charge:
       name: "capacity remaining"
-    capacity_remaining_derived:
+    capacity_remaining:
       name: "capacity remaining derived"
-    temperature_sensors:
+    temperature_sensor_count:
       name: "temperature sensors"
     charging_cycles:
       name: "charging cycles"
     total_charging_cycle_capacity:
       name: "total charging cycle capacity"
-    battery_strings:
+    cell_count:
       name: "battery strings"
     errors_bitmask:
       name: "errors bitmask"
@@ -147,7 +125,7 @@ sensor:
       name: "cell voltage undervoltage recovery"
     cell_voltage_undervoltage_delay:
       name: "cell voltage undervoltage delay"
-    cell_pressure_difference_protection:
+    cell_voltage_difference_protection:
       name: "cell pressure difference protection"
     discharging_overcurrent_protection:
       name: "discharging overcurrent protection"
@@ -157,33 +135,33 @@ sensor:
       name: "charging overcurrent protection"
     charging_overcurrent_delay:
       name: "charging overcurrent delay"
-    balance_starting_voltage:
+    balancing_start_voltage:
       name: "balance starting voltage"
-    balance_opening_pressure_difference:
+    balancing_delta_voltage:
       name: "balance opening pressure difference"
-    power_tube_temperature_protection:
+    mosfet_overtemperature_protection:
       name: "power tube temperature protection"
-    power_tube_temperature_recovery:
+    mosfet_overtemperature_recovery:
       name: "power tube temperature recovery"
-    temperature_sensor_temperature_protection:
+    battery_overtemperature_protection:
       name: "temperature sensor temperature protection"
-    temperature_sensor_temperature_recovery:
+    battery_overtemperature_recovery:
       name: "temperature sensor temperature recovery"
-    temperature_sensor_temperature_difference_protection:
+    battery_temperature_difference_protection:
       name: "temperature sensor temperature difference protection"
-    charging_high_temperature_protection:
+    charging_overtemperature_protection:
       name: "charging high temperature protection"
-    discharging_high_temperature_protection:
+    discharging_overtemperature_protection:
       name: "discharging high temperature protection"
-    charging_low_temperature_protection:
+    charging_undertemperature_protection:
       name: "charging low temperature protection"
-    charging_low_temperature_recovery:
+    charging_undertemperature_recovery:
       name: "charging low temperature recovery"
-    discharging_low_temperature_protection:
+    discharging_undertemperature_protection:
       name: "discharging low temperature protection"
-    discharging_low_temperature_recovery:
+    discharging_undertemperature_recovery:
       name: "discharging low temperature recovery"
-    total_battery_capacity_setting:
+    full_charge_capacity:
       name: "total battery capacity setting"
     current_calibration:
       name: "current calibration"
@@ -191,14 +169,12 @@ sensor:
       name: "device address"
     sleep_wait_time:
       name: "sleep wait time"
-    alarm_low_volume:
+    low_soc_alarm_threshold:
       name: "alarm low volume"
     manufacturing_date:
       name: "manufacturing date"
     total_runtime:
       name: "total runtime"
-#   start_current_calibration:
-#    name: "start current calibration"
     actual_battery_capacity:
       name: "actual battery capacity"
     protocol_version:

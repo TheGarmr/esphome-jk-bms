@@ -1,0 +1,109 @@
+#001 — JK BMS RS485 Modbus V1.0 + Bluetooth
+packages:
+  modbus_telemetry: !include esp32-c3-16-cells-modbus.yaml
+
+substitutions:
+  ble_protocol_version: JK02_32S
+  ble_throttle: "10s"
+
+esp32_ble_tracker:
+  scan_parameters:
+    active: false
+
+ble_client:
+  - mac_address: ${bms_ble_mac_address}
+    id: bms_ble_client0
+
+jk_bms_ble:
+  - ble_client_id: bms_ble_client0
+    protocol_version: ${ble_protocol_version}
+    throttle: ${ble_throttle}
+    id: bms_ble0
+
+binary_sensor:
+  # This is the actual BLE data-link status. It becomes ON after a valid JK
+  # frame is decoded and OFF after the BMS stops replying for several polls.
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    online_status:
+      name: "bluetooth connected"
+    dry_contact_1:
+      name: "dry contact 1"
+    dry_contact_2:
+      name: "dry contact 2"
+
+button:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    retrieve_settings:
+      name: "retrieve settings via bluetooth"
+    retrieve_device_info:
+      name: "retrieve device info via bluetooth"
+    retrieve_logbook:
+      name: "retrieve logbook via bluetooth"
+
+number:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    emergency_duration:
+      name: "emergency duration"
+
+sensor:
+  # RSSI is useful for diagnosing an unstable BLE connection.
+  - platform: ble_client
+    type: rssi
+    ble_client_id: bms_ble_client0
+    name: "bluetooth RSSI"
+
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    emergency_time_countdown:
+      name: "emergency time countdown"
+
+switch:
+  # ON means the ESP32 is allowed to connect to the BMS over BLE. Turn this
+  # OFF before connecting with the JK phone application.
+  - platform: ble_client
+    ble_client_id: bms_ble_client0
+    name: "enable bluetooth connection"
+    id: ble_client_switch0
+
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    # WARNING: Emergency mode bypasses normal BMS protection behavior.
+    emergency:
+      name: "emergency"
+    emergency_button_trigger:
+      name: "emergency button trigger"
+    dry_contact_alarm_intermittent:
+      name: "dry contact alarm intermittent"
+
+select:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    # WARNING: Changing the UART protocol assigned to the wired RS485 port can
+    # stop Modbus communication until the matching protocol is restored.
+    uart1_protocol:
+      name: "uart1 protocol"
+    uart2_protocol:
+      name: "uart2 protocol"
+    uart3_protocol:
+      name: "uart3 protocol"
+    can_protocol:
+      name: "can protocol"
+    dry1_trigger:
+      name: "dry1 trigger"
+    dry2_trigger:
+      name: "dry2 trigger"
+    multiplexed_port_mode:
+      name: "protocol mode"
+
+text_sensor:
+  - platform: jk_bms_ble
+    jk_bms_ble_id: bms_ble0
+    software_version:
+      name: "BMS software version"
+    hardware_version:
+      name: "BMS hardware version"
+    battery_type:
+      name: "battery type"

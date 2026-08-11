@@ -31,7 +31,6 @@ binary_sensor:
       name: "online status"
 
 sensor:
-# Uptime sensor
   - platform: uptime
     name: Uptime Sensor
     id: uptime_sensor
@@ -46,7 +45,7 @@ sensor:
               seconds = seconds % (24 * 3600);
               int hours = seconds / 3600;
               seconds = seconds % 3600;
-              int minutes = seconds /  60;
+              int minutes = seconds / 60;
               seconds = seconds % 60;
               return (
                 (days ? to_string(days) + "d " : "") +
@@ -54,6 +53,7 @@ sensor:
                 (minutes ? to_string(minutes) + "m " : "") +
                 (to_string(seconds) + "s")
               ).c_str();
+
   - platform: jk_bms
     min_cell_voltage:
       name: "min cell voltage"
@@ -99,9 +99,9 @@ sensor:
       name: "charging power"
     discharging_power:
       name: "discharging power"
-    capacity_remaining:
+    state_of_charge:
       name: "capacity remaining"
-    capacity_remaining_derived:
+    capacity_remaining:
       name: "capacity remaining derived"
     temperature_sensors:
       name: "temperature sensors"
@@ -181,8 +181,6 @@ sensor:
       name: "manufacturing date"
     total_runtime:
       name: "total runtime"
-#   start_current_calibration:
-#    name: "start current calibration"
     actual_battery_capacity:
       name: "actual battery capacity"
     protocol_version:
