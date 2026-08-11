@@ -99,6 +99,11 @@ jk_bms_ble:
     protocol_version: ${bms0_protocol_version}
     throttle: 5s
     id: bms0
+    # Override the label of one or more error bits (bit 0-31, JK02 only).
+    # An empty label suppresses the bit entirely.
+    #
+    # error_overrides:
+    #   4: "Cell overvoltage"
   - ble_client_id: client1
     protocol_version: ${bms1_protocol_version}
     throttle: 5s
@@ -1066,6 +1071,9 @@ sensor:
     total_runtime:
       name: "total runtime"
       device_id: device0
+    power_on_count:
+      name: "power on count"
+      device_id: device0
     balancing_current:
       name: "balancing current"
       device_id: device0
@@ -1283,6 +1291,9 @@ sensor:
     total_runtime:
       name: "total runtime"
       device_id: device1
+    power_on_count:
+      name: "power on count"
+      device_id: device1
     balancing_current:
       name: "balancing current"
       device_id: device1
@@ -1498,6 +1509,9 @@ sensor:
       device_id: device2
     total_runtime:
       name: "total runtime"
+      device_id: device2
+    power_on_count:
+      name: "power on count"
       device_id: device2
     balancing_current:
       name: "balancing current"
@@ -1825,6 +1839,15 @@ text_sensor:
     hardware_version:
       name: "hardware version"
       device_id: device0
+    device_model:
+      name: "device model"
+      device_id: device0
+    manufacturing_date:
+      name: "manufacturing date"
+      device_id: device0
+    serial_number:
+      name: "serial number"
+      device_id: device0
 
   - platform: jk_bms_ble
     jk_bms_ble_id: bms1
@@ -1852,6 +1875,15 @@ text_sensor:
     hardware_version:
       name: "hardware version"
       device_id: device1
+    device_model:
+      name: "device model"
+      device_id: device1
+    manufacturing_date:
+      name: "manufacturing date"
+      device_id: device1
+    serial_number:
+      name: "serial number"
+      device_id: device1
 
   - platform: jk_bms_ble
     jk_bms_ble_id: bms2
@@ -1878,4 +1910,13 @@ text_sensor:
       device_id: device2
     hardware_version:
       name: "hardware version"
+      device_id: device2
+    device_model:
+      name: "device model"
+      device_id: device2
+    manufacturing_date:
+      name: "manufacturing date"
+      device_id: device2
+    serial_number:
+      name: "serial number"
       device_id: device2

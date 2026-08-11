@@ -5,6 +5,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import pytest  # noqa: E402
+import voluptuous as vol  # noqa: E402
+
 import components.heltec_balancer_ble as hub_heltec  # noqa: E402
 from components.heltec_balancer_ble import (  # noqa: E402
     binary_sensor as heltec_binary_sensor,
@@ -99,6 +102,57 @@ class TestJkBmsSwitchConstants:
         assert len(switch.SWITCHES) == 3
 
 
+class TestJkBmsErrorOverrides:
+    def test_default_errors_cover_all_16_bits(self):
+        assert len(hub.DEFAULT_ERRORS) == 16
+
+    def test_default_errors_are_immutable(self):
+        # to_code() patches a copy per hub; a mutable default would let one hub's
+        # error_overrides leak into the next one.
+        assert isinstance(hub.DEFAULT_ERRORS, tuple)
+
+    def test_default_errors_labels(self):
+        assert hub.DEFAULT_ERRORS[0] == "Low capacity"
+        assert hub.DEFAULT_ERRORS[10] == "Cell overvoltage"
+        assert hub.DEFAULT_ERRORS[13] == "309_A protection"
+
+    def test_reserved_bits_are_empty(self):
+        for bit in (14, 15):
+            assert hub.DEFAULT_ERRORS[bit] == ""
+
+    @staticmethod
+    def _validate(overrides):
+        config = hub.CONFIG_SCHEMA({"error_overrides": overrides})
+        return config["error_overrides"]
+
+    def test_schema_accepts_bit_index_as_string(self):
+        # ESPHome's YAML loader turns every mapping key into a string.
+        assert self._validate({"0": "Low SoC"}) == {0: "Low SoC"}
+
+    def test_schema_accepts_boundary_bits(self):
+        assert self._validate({"0": "a", "15": "b"}) == {0: "a", 15: "b"}
+
+    def test_schema_accepts_empty_label(self):
+        assert self._validate({"0": ""}) == {0: ""}
+
+    def test_schema_rejects_out_of_range_bit(self):
+        with pytest.raises(vol.Invalid, match="Error bit 16 is out of range"):
+            self._validate({"16": "Nope"})
+        with pytest.raises(vol.Invalid, match="Error bit -1 is out of range"):
+            self._validate({"-1": "Nope"})
+
+    def test_schema_rejects_non_numeric_bit(self):
+        with pytest.raises(vol.Invalid, match="'abc' is not a valid error bit"):
+            self._validate({"abc": "Nope"})
+
+    def test_schema_rejects_non_string_label(self):
+        with pytest.raises(vol.Invalid, match="Must be string"):
+            self._validate({"0": 42})
+
+    def test_error_overrides_is_optional(self):
+        assert hub.CONF_ERROR_OVERRIDES not in hub.CONFIG_SCHEMA({})
+
+
 class TestJkBmsBleSensorLists:
     def test_cells_count(self):
         assert len(ble_sensor.CELL_VOLTAGES) == 32
@@ -119,7 +173,72 @@ class TestJkBmsBleSensorLists:
         assert "balancer_status_bitmask" in ble_sensor.SENSOR_DEFS
         assert "detail_log_entry_count" in ble_sensor.SENSOR_DEFS
         assert "battery_type_id" in ble_sensor.SENSOR_DEFS
-        assert len(ble_sensor.SENSOR_DEFS) == 32
+        assert ble_sensor.CONF_POWER_ON_COUNT in ble_sensor.SENSOR_DEFS
+        assert len(ble_sensor.SENSOR_DEFS) == 33
+
+
+class TestJkBmsBleErrorOverrides:
+    def test_default_errors_cover_all_32_bits(self):
+        assert len(hub_ble.DEFAULT_ERRORS_JK02) == 32
+
+    def test_default_errors_are_immutable(self):
+        # to_code() patches a copy per hub; a mutable default would let one hub's
+        # error_overrides leak into the next one.
+        assert isinstance(hub_ble.DEFAULT_ERRORS_JK02, tuple)
+
+    def test_default_errors_labels(self):
+        assert hub_ble.DEFAULT_ERRORS_JK02[0] == "Wire resistance"
+        assert hub_ble.DEFAULT_ERRORS_JK02[4] == "Battery is fully charged"
+        assert hub_ble.DEFAULT_ERRORS_JK02[28] == "GPS remote lock"
+
+    def test_unused_bits_are_empty(self):
+        for bit in (3, 29, 30, 31):
+            assert hub_ble.DEFAULT_ERRORS_JK02[bit] == ""
+
+    @staticmethod
+    def _validate(overrides):
+        config = hub_ble.CONFIG_SCHEMA(
+            {
+                "protocol_version": "JK02_32S",
+                "ble_client_id": "client0",
+                "error_overrides": overrides,
+            }
+        )
+        return config["error_overrides"]
+
+    def test_schema_accepts_bit_index_as_string(self):
+        # ESPHome's YAML loader turns every mapping key into a string.
+        assert self._validate({"4": "Cell overvoltage"}) == {4: "Cell overvoltage"}
+
+    def test_schema_accepts_boundary_bits(self):
+        assert self._validate({"0": "a", "31": "b"}) == {0: "a", 31: "b"}
+
+    def test_schema_accepts_empty_label(self):
+        assert self._validate({"4": ""}) == {4: ""}
+
+    def test_schema_accepts_hex_bit_index(self):
+        assert self._validate({"0x1F": "Reserved"}) == {31: "Reserved"}
+
+    def test_schema_rejects_out_of_range_bit(self):
+        with pytest.raises(vol.Invalid, match="Error bit 32 is out of range"):
+            self._validate({"32": "Nope"})
+        with pytest.raises(vol.Invalid, match="Error bit -1 is out of range"):
+            self._validate({"-1": "Nope"})
+
+    def test_schema_rejects_non_numeric_bit(self):
+        with pytest.raises(vol.Invalid, match="'abc' is not a valid error bit"):
+            self._validate({"abc": "Nope"})
+
+    def test_schema_rejects_non_string_label(self):
+        with pytest.raises(vol.Invalid, match="Must be string"):
+            self._validate({"4": 42})
+
+    def test_error_overrides_is_optional(self):
+        config = hub_ble.CONFIG_SCHEMA(
+            {"protocol_version": "JK02_32S", "ble_client_id": "client0"}
+        )
+
+        assert hub_ble.CONF_ERROR_OVERRIDES not in config
 
 
 class TestJkBmsBleBinarySensorConstants:
@@ -224,7 +343,10 @@ class TestJkBleTextSensorConstants:
         assert ble_text_sensor.CONF_BALANCER_STATUS in ble_text_sensor.TEXT_SENSORS
         assert ble_text_sensor.CONF_CHARGE_STATUS in ble_text_sensor.TEXT_SENSORS
         assert ble_text_sensor.CONF_BATTERY_TYPE in ble_text_sensor.TEXT_SENSORS
-        assert len(ble_text_sensor.TEXT_SENSORS) == 8
+        assert ble_text_sensor.CONF_DEVICE_MODEL in ble_text_sensor.TEXT_SENSORS
+        assert ble_text_sensor.CONF_MANUFACTURING_DATE in ble_text_sensor.TEXT_SENSORS
+        assert ble_text_sensor.CONF_SERIAL_NUMBER in ble_text_sensor.TEXT_SENSORS
+        assert len(ble_text_sensor.TEXT_SENSORS) == 11
 
 
 class TestJkBmsDisplaySensorLists:
@@ -259,9 +381,67 @@ class TestJkBalancerSensorLists:
         assert len(jk_balancer_switch.SWITCHES) == 1
 
 
+class TestJkBalancerErrorOverrides:
+    def test_default_errors_cover_all_8_bits(self):
+        assert len(hub_jk_balancer.DEFAULT_ERRORS) == 8
+
+    def test_default_errors_are_immutable(self):
+        # to_code() patches a copy per hub; a mutable default would let one hub's
+        # error_overrides leak into the next one.
+        assert isinstance(hub_jk_balancer.DEFAULT_ERRORS, tuple)
+
+    def test_default_errors_labels(self):
+        assert hub_jk_balancer.DEFAULT_ERRORS[0] == "Wrong cell count"
+        assert hub_jk_balancer.DEFAULT_ERRORS[1] == "Resistance too high"
+        assert hub_jk_balancer.DEFAULT_ERRORS[2] == "Overvoltage"
+
+    def test_reserved_bits_are_empty(self):
+        for bit in range(3, 8):
+            assert hub_jk_balancer.DEFAULT_ERRORS[bit] == ""
+
+    @staticmethod
+    def _validate(overrides):
+        config = hub_jk_balancer.CONFIG_SCHEMA({"error_overrides": overrides})
+        return config["error_overrides"]
+
+    def test_schema_accepts_bit_index_as_string(self):
+        # ESPHome's YAML loader turns every mapping key into a string.
+        assert self._validate({"0": "Cell count mismatch"}) == {
+            0: "Cell count mismatch"
+        }
+
+    def test_schema_accepts_boundary_bits(self):
+        assert self._validate({"0": "a", "7": "b"}) == {0: "a", 7: "b"}
+
+    def test_schema_accepts_empty_label(self):
+        assert self._validate({"0": ""}) == {0: ""}
+
+    def test_schema_rejects_out_of_range_bit(self):
+        with pytest.raises(vol.Invalid, match="Error bit 8 is out of range"):
+            self._validate({"8": "Nope"})
+        with pytest.raises(vol.Invalid, match="Error bit -1 is out of range"):
+            self._validate({"-1": "Nope"})
+
+    def test_schema_rejects_non_numeric_bit(self):
+        with pytest.raises(vol.Invalid, match="'abc' is not a valid error bit"):
+            self._validate({"abc": "Nope"})
+
+    def test_schema_rejects_non_string_label(self):
+        with pytest.raises(vol.Invalid, match="Must be string"):
+            self._validate({"0": 42})
+
+    def test_error_overrides_is_optional(self):
+        assert (
+            hub_jk_balancer.CONF_ERROR_OVERRIDES
+            not in hub_jk_balancer.CONFIG_SCHEMA({})
+        )
+
+
 class TestHeltecBalancerBleSensorLists:
     def test_sensor_defs_completeness(self):
-        assert len(heltec_sensor.SENSOR_DEFS) == 23
+        assert heltec_sensor.CONF_TOTAL_RUNTIME in heltec_sensor.SENSOR_DEFS
+        assert heltec_sensor.CONF_POWER_ON_COUNT in heltec_sensor.SENSOR_DEFS
+        assert len(heltec_sensor.SENSOR_DEFS) == 24
 
     def test_binary_sensor_defs_dict(self):
         assert (
@@ -277,7 +457,21 @@ class TestHeltecBalancerBleSensorLists:
     def test_text_sensors_list(self):
         assert heltec_text_sensor.CONF_ERRORS in heltec_text_sensor.TEXT_SENSORS
         assert heltec_text_sensor.CONF_BATTERY_TYPE in heltec_text_sensor.TEXT_SENSORS
-        assert len(heltec_text_sensor.TEXT_SENSORS) == 5
+        assert heltec_text_sensor.CONF_DEVICE_MODEL in heltec_text_sensor.TEXT_SENSORS
+        assert (
+            heltec_text_sensor.CONF_HARDWARE_VERSION in heltec_text_sensor.TEXT_SENSORS
+        )
+        assert (
+            heltec_text_sensor.CONF_SOFTWARE_VERSION in heltec_text_sensor.TEXT_SENSORS
+        )
+        assert (
+            heltec_text_sensor.CONF_PROTOCOL_VERSION in heltec_text_sensor.TEXT_SENSORS
+        )
+        assert (
+            heltec_text_sensor.CONF_MANUFACTURING_DATE
+            in heltec_text_sensor.TEXT_SENSORS
+        )
+        assert len(heltec_text_sensor.TEXT_SENSORS) == 10
 
     def test_buttons_dict(self):
         assert heltec_button.CONF_RETRIEVE_SETTINGS in heltec_button.BUTTONS

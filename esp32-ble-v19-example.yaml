@@ -64,6 +64,11 @@ jk_bms_ble:
     protocol_version: ${protocol_version}
     throttle: 5s
     id: bms0
+    # Override the label of one or more error bits (bit 0-31, JK02 only).
+    # An empty label suppresses the bit entirely.
+    #
+    # error_overrides:
+    #   4: "Cell overvoltage"
 
 binary_sensor:
   - platform: jk_bms_ble
@@ -338,6 +343,8 @@ sensor:
       name: "total charging cycle capacity"
     total_runtime:
       name: "total runtime"
+    power_on_count:
+      name: "power on count"
     balancing_current:
       name: "balancing current"
     emergency_time_countdown:
@@ -441,3 +448,9 @@ text_sensor:
       name: "hardware version"
     battery_type:
       name: "battery type"
+    device_model:
+      name: "device model"
+    manufacturing_date:
+      name: "manufacturing date"
+    serial_number:
+      name: "serial number"

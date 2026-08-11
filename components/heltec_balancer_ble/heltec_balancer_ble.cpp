@@ -38,6 +38,10 @@ static const uint8_t END_OF_FRAME = 0xFF;
 static const uint16_t MIN_RESPONSE_SIZE = 20;   // Write acknowledge frame
 static const uint16_t MAX_RESPONSE_SIZE = 300;  // Cell info frame
 
+// Preamble(2) + device address(1) + function(1) + command(2) + length(2)
+static const uint8_t FRAME_HEADER_SIZE = 8;
+static const uint8_t FRAME_LENGTH_OFFSET = 6;
+
 static const uint8_t OPERATION_STATUS_SIZE = 13;
 static constexpr const char *const OPERATION_STATUS[OPERATION_STATUS_SIZE] = {
     "Unknown",                                   // 0x00
@@ -153,6 +157,7 @@ void HeltecBalancerBle::dump_config() {  // NOLINT(google-readability-function-s
   LOG_SENSOR("", "Capacity Remaining", this->capacity_remaining_sensor_);
   LOG_SENSOR("", "State of Charge", this->state_of_charge_sensor_);
   LOG_SENSOR("", "Total Runtime", this->total_runtime_sensor_);
+  LOG_SENSOR("", "Power On Count", this->power_on_count_sensor_);
   LOG_SENSOR("", "Balancing Current", this->balancing_current_sensor_);
   LOG_SENSOR("", "Errors Bitmask", this->errors_bitmask_sensor_);
   LOG_SENSOR("", "Cell Detection Failed Bitmask", this->cell_detection_failed_bitmask_sensor_);
@@ -170,6 +175,11 @@ void HeltecBalancerBle::dump_config() {  // NOLINT(google-readability-function-s
   LOG_TEXT_SENSOR("", "Total Runtime Formatted", this->total_runtime_formatted_text_sensor_);
   LOG_TEXT_SENSOR("", "Buzzer Mode", this->buzzer_mode_text_sensor_);
   LOG_TEXT_SENSOR("", "Battery Type", this->battery_type_text_sensor_);
+  LOG_TEXT_SENSOR("", "Device Model", this->device_model_text_sensor_);
+  LOG_TEXT_SENSOR("", "Hardware Version", this->hardware_version_text_sensor_);
+  LOG_TEXT_SENSOR("", "Software Version", this->software_version_text_sensor_);
+  LOG_TEXT_SENSOR("", "Protocol Version", this->protocol_version_text_sensor_);
+  LOG_TEXT_SENSOR("", "Manufacturing Date", this->manufacturing_date_text_sensor_);
 }
 
 std::array<uint8_t, 20> HeltecBalancerBle::build_command_frame_(uint8_t function, uint8_t command,
@@ -374,11 +384,6 @@ void HeltecBalancerBle::update() {}
 
 // TODO: There is no need to assemble frames if the MTU can be increased to > MAX_RESPONSE_SIZE
 void HeltecBalancerBle::assemble(const uint8_t *data, uint16_t length) {
-  if (this->frame_buffer_.size() > MAX_RESPONSE_SIZE) {
-    ESP_LOGW(TAG, "Frame dropped because of invalid length");
-    this->frame_buffer_.clear();
-  }
-
   // Flush buffer on every preamble
   if (length >= 2 && data[0] == SOF_RESPONSE_BYTE1 && data[1] == SOF_RESPONSE_BYTE2) {
     this->frame_buffer_.clear();
@@ -386,23 +391,39 @@ void HeltecBalancerBle::assemble(const uint8_t *data, uint16_t length) {
 
   this->frame_buffer_.insert(this->frame_buffer_.end(), data, data + length);
 
-  if (this->frame_buffer_.size() >= MIN_RESPONSE_SIZE && this->frame_buffer_.back() == END_OF_FRAME) {
-    const uint8_t *raw = &this->frame_buffer_[0];
-    const uint16_t frame_size = this->frame_buffer_.size();
+  if (this->frame_buffer_.size() < FRAME_HEADER_SIZE)
+    return;
 
-    uint8_t computed_crc = crc(raw, frame_size - 2);
-    uint8_t remote_crc = raw[frame_size - 2];
-    if (computed_crc != remote_crc) {
-      ESP_LOGW(TAG, "CRC check failed! 0x%02X != 0x%02X", computed_crc, remote_crc);
-      this->frame_buffer_.clear();
-      return;
-    }
-
-    std::vector<uint8_t> data(this->frame_buffer_.begin(), this->frame_buffer_.end());
-
-    this->decode_(data);
+  const uint16_t frame_size = (uint16_t(this->frame_buffer_[FRAME_LENGTH_OFFSET + 1]) << 8) |
+                              uint16_t(this->frame_buffer_[FRAME_LENGTH_OFFSET]);
+  if (frame_size < MIN_RESPONSE_SIZE || frame_size > MAX_RESPONSE_SIZE) {
+    ESP_LOGW(TAG, "Frame dropped because of invalid length");
     this->frame_buffer_.clear();
+    return;
   }
+
+  if (this->frame_buffer_.size() < frame_size)
+    return;  // Wait for the remaining fragments
+
+  const uint8_t *raw = &this->frame_buffer_[0];
+  if (raw[frame_size - 1] != END_OF_FRAME) {
+    ESP_LOGW(TAG, "Frame dropped because of missing end of frame marker");
+    this->frame_buffer_.clear();
+    return;
+  }
+
+  uint8_t computed_crc = crc(raw, frame_size - 2);
+  uint8_t remote_crc = raw[frame_size - 2];
+  if (computed_crc != remote_crc) {
+    ESP_LOGW(TAG, "CRC check failed! 0x%02X != 0x%02X", computed_crc, remote_crc);
+    this->frame_buffer_.clear();
+    return;
+  }
+
+  const std::vector<uint8_t> frame(this->frame_buffer_.begin(), this->frame_buffer_.begin() + frame_size);
+  this->frame_buffer_.erase(this->frame_buffer_.begin(), this->frame_buffer_.begin() + frame_size);
+
+  this->decode_(frame);
 }
 
 void HeltecBalancerBle::decode_(const std::vector<uint8_t> &data) {
@@ -1084,25 +1105,46 @@ void HeltecBalancerBle::decode_device_info_(const std::vector<uint8_t> &data) {
   // 3     1   0x01                   Function (read)
   // 4     2   0x01 0x00              Command (device info)
   // 6     2   0x64 0x00              Length (100 bytes)
+
   // 8    16   0x47 0x57 0x2D 0x32 0x34 0x53 0x34 0x45 0x42 0x00 0x00 0x00 0x00 0x00 0x00 0x00    Model    GW-24S4EB
-  ESP_LOGI(TAG, "  Model: %s", std::string(data.begin() + 8, data.begin() + 8 + 16).c_str());
+  auto device_model_begin = data.begin() + 8;
+  this->publish_state_(this->device_model_text_sensor_,
+                       std::string(device_model_begin, std::find(device_model_begin, device_model_begin + 16, '\0')));
+
   // 24    8   0x48 0x57 0x2D 0x32 0x2E 0x38 0x2E 0x30    Hardware version           HW-2.8.0
-  ESP_LOGI(TAG, "  Hardware version: %s", std::string(data.begin() + 24, data.begin() + 24 + 8).c_str());
+  auto hardware_version_begin = data.begin() + 24;
+  this->publish_state_(
+      this->hardware_version_text_sensor_,
+      std::string(hardware_version_begin, std::find(hardware_version_begin, hardware_version_begin + 8, '\0')));
+
   // 32    8   0x5A 0x48 0x2D 0x31 0x2E 0x32 0x2E 0x33    Software version           ZH-1.2.3
-  ESP_LOGI(TAG, "  Software version: %s", std::string(data.begin() + 32, data.begin() + 32 + 8).c_str());
+  auto software_version_begin = data.begin() + 32;
+  this->publish_state_(
+      this->software_version_text_sensor_,
+      std::string(software_version_begin, std::find(software_version_begin, software_version_begin + 8, '\0')));
+
   // 40    8   0x56 0x31 0x2E 0x30 0x2E 0x30 0x00 0x00    Protocol version           V1.0.0
-  ESP_LOGI(TAG, "  Protocol version: %s", std::string(data.begin() + 40, data.begin() + 40 + 8).c_str());
+  auto protocol_version_begin = data.begin() + 40;
+  this->publish_state_(
+      this->protocol_version_text_sensor_,
+      std::string(protocol_version_begin, std::find(protocol_version_begin, protocol_version_begin + 8, '\0')));
+
   // 48    8   0x32 0x30 0x32 0x32 0x30 0x35 0x33 0x31    Production date            20220531
-  ESP_LOGI(TAG, "  Manufacturing date: %s", std::string(data.begin() + 48, data.begin() + 48 + 8).c_str());
+  auto manufacturing_date_begin = data.begin() + 48;
+  this->publish_state_(
+      this->manufacturing_date_text_sensor_,
+      std::string(manufacturing_date_begin, std::find(manufacturing_date_begin, manufacturing_date_begin + 8, '\0')));
+
   // 56    4   0x05 0x00 0x00 0x00    Power on count                                 5
-  ESP_LOGI(TAG, "  Power on count: %d", heltec_get_16bit(56));
+  this->publish_state_(this->power_on_count_sensor_, (float) heltec_get_16bit(56));
+
   // 60    4   0x01 0x91 0x0A 0x00    Total runtime                                  7D
+  //                                  (0x0A9101 = 692481 / 3600 = 192.35h = 8.01d)
   ESP_LOGI(TAG, "  Total runtime: %s (%lus)", format_total_runtime_(heltec_get_32bit(60)).c_str(),
            (unsigned long) heltec_get_32bit(60));
   this->publish_state_(this->total_runtime_sensor_, (float) heltec_get_32bit(60));
   this->publish_state_(this->total_runtime_formatted_text_sensor_, format_total_runtime_(heltec_get_32bit(60)));
 
-  //                                  (0x0A9101 = 692481 / 3600 = 192.35h = 8.01d)
   // 64   34   0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
   //           0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
   // 98    1   0xAB                    CRC
@@ -1143,6 +1185,7 @@ void HeltecBalancerBle::publish_device_unavailable_() {
   this->publish_state_(capacity_remaining_sensor_, NAN);
   this->publish_state_(state_of_charge_sensor_, NAN);
   this->publish_state_(total_runtime_sensor_, NAN);
+  this->publish_state_(power_on_count_sensor_, NAN);
   this->publish_state_(balancing_current_sensor_, NAN);
   this->publish_state_(errors_bitmask_sensor_, NAN);
   this->publish_state_(cell_detection_failed_bitmask_sensor_, NAN);

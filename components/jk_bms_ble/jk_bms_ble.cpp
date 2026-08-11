@@ -29,41 +29,6 @@ static const uint8_t COMMAND_LOGBOOK = 0xA1;
 static const uint16_t MIN_RESPONSE_SIZE = 300;
 static const uint16_t MAX_RESPONSE_SIZE = 384 + 16;
 
-static constexpr const char *const ERRORS_JK02[] = {
-    "Wire resistance",                      // bit 0
-    "MOSFET overtemperature",               // bit 1
-    "Cell count is not equal to settings",  // bit 2
-    "",                                     // bit 3 (Previously: "Current sensor anomaly")
-    "Battery is fully charged",             // bit 4
-    "Battery pack overvoltage",             // bit 5
-    "Charge overcurrent",                   // bit 6
-    "Charge short circuit",                 // bit 7
-    "Charge overtemperature",               // bit 8
-    "Charge undertemperature",              // bit 9
-    "Coprocessor communication error",      // bit 10
-    "Cell undervoltage",                    // bit 11
-    "Battery pack undervoltage",            // bit 12
-    "Discharge overcurrent",                // bit 13
-    "Discharge short circuit",              // bit 14
-    "Discharge overtemperature",            // bit 15
-    "Charging MOSFET abnormal",             // bit 16
-    "Discharging MOSFET abnormal",          // bit 17
-    "GPS disconnected",                     // bit 18
-    "Modify password in time",              // bit 19
-    "Discharge on failed",                  // bit 20
-    "Battery overtemperature",              // bit 21
-    "Temperature sensor anomaly",           // bit 22
-    "PL module anomaly",                    // bit 23
-    "SCP release failed",                   // bit 24
-    "Discharge OCP II",                     // bit 25
-    "Discharge OCP III",                    // bit 26
-    "Discharge undertemperature alarm",     // bit 27
-    "GPS remote lock",                      // bit 28
-    "",                                     // bit 29
-    "",                                     // bit 30
-    "",                                     // bit 31
-};
-
 static constexpr const char *const LOGBOOK_CODES[] = {
     "",                                                    // 0x00
     "Boot",                                                // 0x01
@@ -432,6 +397,7 @@ void JkBmsBle::dump_config() {  // NOLINT(google-readability-function-size,reada
   LOG_SENSOR("", "Charging Cycles", this->charging_cycles_sensor_);
   LOG_SENSOR("", "Total Charging Cycle Capacity", this->total_charging_cycle_capacity_sensor_);
   LOG_SENSOR("", "Total Runtime", this->total_runtime_sensor_);
+  LOG_SENSOR("", "Power On Count", this->power_on_count_sensor_);
   LOG_SENSOR("", "Heating Current", this->heating_current_sensor_);
   LOG_SENSOR("", "Balancing Current", this->balancing_current_sensor_);
   LOG_SENSOR("", "Emergency Time Countdown", this->emergency_time_countdown_sensor_);
@@ -447,6 +413,9 @@ void JkBmsBle::dump_config() {  // NOLINT(google-readability-function-size,reada
   LOG_TEXT_SENSOR("", "Software Version", this->software_version_text_sensor_);
   LOG_TEXT_SENSOR("", "Hardware Version", this->hardware_version_text_sensor_);
   LOG_TEXT_SENSOR("", "Battery Type", this->battery_type_text_sensor_);
+  LOG_TEXT_SENSOR("", "Device Model", this->device_model_text_sensor_);
+  LOG_TEXT_SENSOR("", "Manufacturing Date", this->manufacturing_date_text_sensor_);
+  LOG_TEXT_SENSOR("", "Serial Number", this->serial_number_text_sensor_);
 }
 
 #ifdef USE_ESP32
@@ -848,7 +817,8 @@ void JkBmsBle::decode_jk02_cell_info_(const std::vector<uint8_t> &data) {
     // 166-169: errors bitmask, little-endian 32-bit
     uint32_t raw_errors_bitmask = jk_get_32bit(134 + offset);
     this->publish_state_(this->errors_bitmask_hex_text_sensor_, this->to_hex_string_(raw_errors_bitmask));
-    this->publish_state_(this->errors_text_sensor_, this->error_bits_to_string_(raw_errors_bitmask, ERRORS_JK02, 32));
+    this->publish_state_(this->errors_text_sensor_,
+                         this->error_bits_to_string_(raw_errors_bitmask, this->errors_jk02_table_, 32));
   } else {
     this->publish_state_(this->mosfet_temperature_sensor_, (float) ((int16_t) jk_get_16bit(134 + offset)) * 0.1f);
   }
@@ -858,7 +828,8 @@ void JkBmsBle::decode_jk02_cell_info_(const std::vector<uint8_t> &data) {
   if (frame_version != FRAME_VERSION_JK02_32S) {
     uint32_t raw_errors_bitmask = jk_get_16bit(136 + offset);
     this->publish_state_(this->errors_bitmask_hex_text_sensor_, this->to_hex_string_(raw_errors_bitmask));
-    this->publish_state_(this->errors_text_sensor_, this->error_bits_to_string_(raw_errors_bitmask, ERRORS_JK02, 16));
+    this->publish_state_(this->errors_text_sensor_,
+                         this->error_bits_to_string_(raw_errors_bitmask, this->errors_jk02_table_, 16));
   }
 
   // 138   2   0x00 0x00              Balance current      0.001         A
@@ -936,14 +907,12 @@ void JkBmsBle::decode_jk02_cell_info_(const std::vector<uint8_t> &data) {
   ESP_LOGD(TAG, "Discharging current sensor voltage: %.3f", jk_get_16bit(192 + offset) * 0.001f);
   ESP_LOGD(TAG, "Battery voltage correction factor: %f", (float) jk_get_32bit(194 + offset) * 1.0f);
 
-  ESP_LOGD(TAG, "Battery voltage: %.3f", (float) ieee_float_(jk_get_32bit(202 + offset)));
+  // 202+32   2   0x30 0x14              Battery voltage       0.01         V
+  ESP_LOGD(TAG, "Battery voltage: %.2f V", (float) jk_get_16bit(202 + offset) * 0.01f);
   ESP_LOGD(TAG, "Heating current: %.3f A", (float) ((int16_t) jk_get_16bit(204 + offset)) * 0.001f);
   this->publish_state_(this->heating_current_sensor_, (float) ((int16_t) jk_get_16bit(204 + offset)) * 0.001f);
 
   ESP_LOGD(TAG, "Charger Plugged: %s", ONOFF((bool) data[213 + offset]));
-  ESP_LOGD(TAG, "Temperature sensor 3: %.1f °C", (float) jk_get_16bit(222 + offset) * 0.1f);
-  ESP_LOGD(TAG, "Temperature sensor 4: %.1f °C", (float) jk_get_16bit(224 + offset) * 0.1f);
-  ESP_LOGD(TAG, "Temperature sensor 5: %.1f °C", (float) jk_get_16bit(226 + offset) * 0.1f);
   this->publish_state_(this->smart_sleep_countdown_sensor_, (float) jk_get_32bit(238 + offset));
   ESP_LOGD(TAG, "PCL Module State: %s", ONOFF((bool) data[242 + offset]));
 
@@ -1436,7 +1405,10 @@ void JkBmsBle::decode_jk02_settings_(const std::vector<uint8_t> &data) {
     this->publish_state_(this->heating_switch_, check_bit_(data[282], 1));
     this->publish_state_(this->disable_temperature_sensors_switch_, check_bit_(data[282], 2));
     ESP_LOGI(TAG, "  GPS Heartbeat: %s", ONOFF(check_bit_(data[282], 4)));
-    ESP_LOGI(TAG, "  Port switch: %s", check_bit_(data[282], 8) ? "RS485" : "CAN");
+    ESP_LOGV(TAG, "  Port switch: %s", check_bit_(data[282], 8) ? "RS485" : "CAN");
+    // The bit value doubles as the option index of the multiplexed_port_mode select (0: CAN, 1: RS485)
+    if (const char *name = multiplexed_port_mode_table_.get(check_bit_(data[282], 8) ? 1 : 0))
+      this->publish_state_(this->multiplexed_port_mode_select_, name);
     this->publish_state_(this->display_always_on_switch_, check_bit_(data[282], 16));
     ESP_LOGI(TAG, "  Special charger: %s", ONOFF(check_bit_(data[282], 32)));
     this->publish_state_(this->smart_sleep_switch_, check_bit_(data[282], 64));
@@ -1687,8 +1659,10 @@ void JkBmsBle::decode_device_info_(const std::vector<uint8_t> &data) {
   // 0     4   0x55 0xAA 0xEB 0x90    Header
   // 4     1   0x03                   Frame type
   // 5     1   0xC9                   Frame counter
-  // 6    16   0x4A 0x4B 0x5F 0x50 0x42 0x32 0x41 0x31 0x36 0x53 0x31 0x35 0x50 0x00 0x00 0x00
-  ESP_LOGI(TAG, "  Vendor ID: %s", std::string(data.begin() + 6, data.begin() + 6 + 16).c_str());
+  // 6    16   0x4A 0x4B 0x5F 0x50 0x42 0x32 0x41 0x31 0x36 0x53 0x31 0x35 0x50 0x00 0x00 0x00    Vendor ID / model
+  auto device_model_begin = data.begin() + 6;
+  this->publish_state_(this->device_model_text_sensor_,
+                       std::string(device_model_begin, std::find(device_model_begin, device_model_begin + 16, '\0')));
 
   // 22    8   0x31 0x34 0x2E 0x58 0x41 0x00 0x00 0x00    Hardware version
   auto hardware_version_begin = data.begin() + 22;
@@ -1705,8 +1679,8 @@ void JkBmsBle::decode_device_info_(const std::vector<uint8_t> &data) {
   // 38    4   0x54 0xE6 0x01 0x00
   ESP_LOGI(TAG, "  Uptime: %lu s", (unsigned long) jk_get_32bit(38));
 
-  // 42    4   0x9C 0x00 0x00 0x00
-  ESP_LOGI(TAG, "  Power on count: %lu", (unsigned long) jk_get_32bit(42));
+  // 42    4   0x9C 0x00 0x00 0x00    Power on count
+  this->publish_state_(this->power_on_count_sensor_, (float) jk_get_32bit(42));
 
   // 46   16   0x4A 0x4B 0x5F 0x50 0x42 0x32 0x41 0x31 0x36 0x53 0x31 0x35 0x50 0x00 0x00 0x00
   ESP_LOGI(TAG, "  Device name: %s", std::string(data.begin() + 46, data.begin() + 46 + 16).c_str());
@@ -1714,12 +1688,17 @@ void JkBmsBle::decode_device_info_(const std::vector<uint8_t> &data) {
   // 62   16   0x31 0x32 0x33 0x34 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
   ESP_LOGI(TAG, "  Device passcode: %s", std::string(data.begin() + 62, data.begin() + 62 + 16).c_str());
 
-  // 78    8   0x32 0x33 0x31 0x31 0x31 0x38 0x00 0x00
-  ESP_LOGI(TAG, "  Manufacturing date: 20%.2s-%.2s-%.2s", (const char *) &data[78], (const char *) &data[80],
-           (const char *) &data[82]);
+  // 78    6   0x32 0x33 0x31 0x31 0x31 0x38    Manufacturing date (YYMMDD), empty on JK04
+  auto manufacturing_date_begin = data.begin() + 78;
+  this->publish_state_(
+      this->manufacturing_date_text_sensor_,
+      data[78] == '\0' ? "" : "20" + std::string(manufacturing_date_begin, manufacturing_date_begin + 6));
 
-  // 86    8   0x33 0x30 0x39 0x32 0x35 0x37 0x32 0x31 0x33 0x34 0x00
-  ESP_LOGI(TAG, "  Serial number: %s", std::string(data.begin() + 86, data.begin() + 86 + 11).c_str());
+  // 86    8   0x33 0x30 0x39 0x32 0x35 0x37 0x32 0x31 0x33 0x34 0x00    Serial number
+  auto serial_number_begin = data.begin() + 86;
+  this->publish_state_(
+      this->serial_number_text_sensor_,
+      std::string(serial_number_begin, std::find(serial_number_begin, serial_number_begin + 11, '\0')));
 
   // 97    5   0x30 0x30 0x30 0x30 0x00
   ESP_LOGI(TAG, "  Passcode: %s", std::string(data.begin() + 97, data.begin() + 97 + 5).c_str());
@@ -1985,19 +1964,22 @@ std::string JkBmsBle::to_hex_string_(const uint32_t mask) {
   return std::string(buf);
 }
 
-std::string JkBmsBle::error_bits_to_string_(const uint32_t mask, const char *const *errors, const uint8_t errors_size) {
-  bool first = true;
+std::string JkBmsBle::error_bits_to_string_(const uint32_t mask, const LookupTable &errors, const uint8_t bits) {
   std::string errors_list;
 
-  if (mask) {
-    for (int i = 0; i < errors_size; i++) {
-      if ((mask & (1 << i)) && errors[i][0] != '\0') {
-        if (!first)
-          errors_list.append(";");
-        first = false;
-        errors_list.append(errors[i]);
-      }
-    }
+  for (uint8_t i = 0; i < bits; i++) {
+    if ((mask & (1UL << i)) == 0)
+      continue;
+
+    // Bits without a label (unused or suppressed via `error_overrides`) and bits beyond
+    // the configured table are reported by the raw bitmask sensor only.
+    const char *label = errors.get(i);
+    if (label == nullptr || label[0] == '\0')
+      continue;
+
+    if (!errors_list.empty())
+      errors_list.append(";");
+    errors_list.append(label);
   }
 
   return errors_list;

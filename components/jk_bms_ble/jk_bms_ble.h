@@ -267,6 +267,9 @@ class JkBmsBle :
     total_charging_cycle_capacity_sensor_ = total_charging_cycle_capacity_sensor;
   }
   void set_total_runtime_sensor(sensor::Sensor *total_runtime_sensor) { total_runtime_sensor_ = total_runtime_sensor; }
+  void set_power_on_count_sensor(sensor::Sensor *power_on_count_sensor) {
+    power_on_count_sensor_ = power_on_count_sensor;
+  }
   void set_balancing_current_sensor(sensor::Sensor *balancing_current_sensor) {
     balancing_current_sensor_ = balancing_current_sensor;
   }
@@ -325,6 +328,15 @@ class JkBmsBle :
   }
   void set_battery_type_text_sensor(text_sensor::TextSensor *battery_type_text_sensor) {
     battery_type_text_sensor_ = battery_type_text_sensor;
+  }
+  void set_device_model_text_sensor(text_sensor::TextSensor *device_model_text_sensor) {
+    device_model_text_sensor_ = device_model_text_sensor;
+  }
+  void set_manufacturing_date_text_sensor(text_sensor::TextSensor *manufacturing_date_text_sensor) {
+    manufacturing_date_text_sensor_ = manufacturing_date_text_sensor;
+  }
+  void set_serial_number_text_sensor(text_sensor::TextSensor *serial_number_text_sensor) {
+    serial_number_text_sensor_ = serial_number_text_sensor;
   }
 
   void set_charging_switch(switch_::Switch *charging_switch) { charging_switch_ = charging_switch; }
@@ -392,6 +404,7 @@ class JkBmsBle :
   void set_multiplexed_port_mode_table(const char *const *entries, size_t count) {
     multiplexed_port_mode_table_ = {entries, count};
   }
+  void set_errors_jk02_table(const char *const *entries, size_t count) { errors_jk02_table_ = {entries, count}; }
 
   void assemble(const uint8_t *data, uint16_t length);
   void set_protocol_version(ProtocolVersion protocol_version) { protocol_version_ = protocol_version; }
@@ -486,6 +499,7 @@ class JkBmsBle :
   sensor::Sensor *charging_cycles_sensor_{nullptr};
   sensor::Sensor *total_charging_cycle_capacity_sensor_{nullptr};
   sensor::Sensor *total_runtime_sensor_{nullptr};
+  sensor::Sensor *power_on_count_sensor_{nullptr};
   sensor::Sensor *balancing_current_sensor_{nullptr};
   sensor::Sensor *emergency_time_countdown_sensor_{nullptr};
   sensor::Sensor *smart_sleep_countdown_sensor_{nullptr};
@@ -530,6 +544,7 @@ class JkBmsBle :
   LookupTable can_protocol_table_;
   LookupTable lcd_buzzer_trigger_table_;
   LookupTable multiplexed_port_mode_table_;
+  LookupTable errors_jk02_table_;
 
   text_sensor::TextSensor *errors_bitmask_hex_text_sensor_{nullptr};
   text_sensor::TextSensor *errors_text_sensor_{nullptr};
@@ -539,6 +554,9 @@ class JkBmsBle :
   text_sensor::TextSensor *software_version_text_sensor_{nullptr};
   text_sensor::TextSensor *hardware_version_text_sensor_{nullptr};
   text_sensor::TextSensor *battery_type_text_sensor_{nullptr};
+  text_sensor::TextSensor *device_model_text_sensor_{nullptr};
+  text_sensor::TextSensor *manufacturing_date_text_sensor_{nullptr};
+  text_sensor::TextSensor *serial_number_text_sensor_{nullptr};
 
   std::vector<uint8_t> frame_buffer_;
   bool status_notification_received_ = false;
@@ -567,7 +585,7 @@ class JkBmsBle :
   void reset_online_status_tracker_();
   void track_online_status_();
   std::string to_hex_string_(uint32_t mask);
-  std::string error_bits_to_string_(uint32_t bitmask, const char *const *errors, uint8_t errors_size);
+  std::string error_bits_to_string_(uint32_t bitmask, const LookupTable &errors, uint8_t bits);
   std::string charge_status_id_to_string_(uint8_t status);
   std::string battery_type_id_to_string_(uint8_t code);
 
