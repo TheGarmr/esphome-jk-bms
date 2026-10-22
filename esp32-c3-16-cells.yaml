@@ -90,8 +90,10 @@ sensor:
     power:
       name: "power"
     charging_power:
+      id: charging_power
       name: "charging power"
     discharging_power:
+      id: discharging_power
       name: "discharging power"
     state_of_charge:
       name: "capacity remaining"
@@ -179,6 +181,32 @@ sensor:
       name: "actual battery capacity"
     protocol_version:
       name: "protocol version"
+
+  - platform: integration
+    name: "charging energy"
+    sensor: charging_power
+    time_unit: h
+    integration_method: left
+    restore: true
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
+
+  - platform: integration
+    name: "discharging energy"
+    sensor: discharging_power
+    time_unit: h
+    integration_method: left
+    restore: true
+    unit_of_measurement: kWh
+    device_class: energy
+    state_class: total_increasing
+    accuracy_decimals: 3
+    filters:
+      - multiply: 0.001
 
 switch:
   - platform: jk_bms
