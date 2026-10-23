@@ -3,6 +3,9 @@ packages:
   modbus_telemetry: !include esp32-c3-16-cells-modbus.yaml
 
 substitutions:
+  # Inherited Modbus link uses the left RS485-1 / UART1 port. All DIP switches
+  # OFF correspond to device address 0 on this port.
+  device_addr: "0"
   ble_protocol_version: JK02_32S
   ble_throttle: "10s"
 

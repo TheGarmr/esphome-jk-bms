@@ -1,0 +1,57 @@
+# Diagnostic-only JK-PB Modbus probe for the left RS485-1 / UART1 port.
+#
+# This deliberately bypasses ESPHome's modbus and modbus_controller components.
+# It alternates two safe read-only requests, waits until every TX byte has left
+# the UART (flush), and logs every byte observed in both directions:
+#   - JK protocol #000 status request (the protocol known to work previously)
+#   - JK Modbus protocol #001 request
+#
+# Expected request (device address 0, holding register 0x1200, one register):
+#   00 03 12 00 00 01 80 A3
+# A valid Modbus response starts with:
+#   00 03 02 ...
+# A valid protocol #000 response starts with:
+#   4E 57 ...
+
+uart:
+  - id: uart_0
+    baud_rate: 115200
+    data_bits: 8
+    parity: NONE
+    stop_bits: 1
+    rx_buffer_size: 384
+    tx_pin: ${tx_pin}
+    rx_pin: ${rx_pin}
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        timeout: 10ms
+      sequence:
+        - lambda: |-
+            UARTDebug::log_hex(direction, bytes, ':');
+
+interval:
+  - interval: 5s
+    then:
+      - lambda: |-
+          static bool send_legacy_request = true;
+          static const uint8_t legacy_request[] = {
+            0x4E, 0x57, 0x00, 0x13, 0x00, 0x00, 0x00, 0x00,
+            0x06, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+            0x68, 0x00, 0x00, 0x01, 0x28
+          };
+          static const uint8_t modbus_request[] = {
+            0x00, 0x03, 0x12, 0x00, 0x00, 0x01, 0x80, 0xA3
+          };
+
+          if (send_legacy_request) {
+            ESP_LOGI("jk_modbus_probe", "TEST #000: sending legacy JK status request");
+            id(uart_0).write_array(legacy_request, sizeof(legacy_request));
+          } else {
+            ESP_LOGI("jk_modbus_probe", "TEST #001: sending Modbus request to address 0, register 0x1200");
+            id(uart_0).write_array(modbus_request, sizeof(modbus_request));
+          }
+          id(uart_0).flush();
+          ESP_LOGI("jk_modbus_probe", "TX FIFO drained; waiting for raw RX bytes");
+          send_legacy_request = !send_legacy_request;
