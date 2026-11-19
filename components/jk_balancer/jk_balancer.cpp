@@ -2,9 +2,26 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
+#include <cmath>
+
+// Fallback for ESPHome < 2026.10.0
+#ifndef ESPHOME_LOG_TAG
+#define ESPHOME_LOG_TAG(name, tag) static const char *const name = tag
+#endif
+
 namespace esphome::jk_balancer {
 
-static const char *const TAG = "jk_balancer";
+ESPHOME_LOG_TAG(TAG, "jk_balancer");
+
+static constexpr size_t MAX_HEX_DUMP_BYTES = 100;
+
+static void log_hex_chunked(const char *tag, const uint8_t *data, size_t size) {
+  char buf[format_hex_pretty_size(100)];
+  for (size_t i = 0; i < size; i += 100) {
+    size_t len = std::min<size_t>(100, size - i);
+    ESP_LOGVV(tag, "  %s", format_hex_pretty_to(buf, sizeof(buf), data + i, len, '.'));
+  }
+}
 
 static const uint8_t MAX_NO_RESPONSE_COUNT = 5;
 
@@ -23,11 +40,12 @@ void JkBalancer::on_jk_balancer_modbus_data(const uint8_t &function, const std::
     case FUNCTION_SET_CELL_COUNT:
     case FUNCTION_SET_TRIGGER_VOLTAGE:
     case FUNCTION_SET_MAX_BALANCE_CURRENT:
-      ESP_LOGD(TAG, "Write register response received: %s ...", format_hex_pretty(data.data(), 6).c_str());  // NOLINT
+      char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
+      ESP_LOGD(TAG, "Write register response received: %s ...", format_hex_pretty_to(hex_buf, data.data(), 6, '.'));
       break;
     default:
       ESP_LOGW(TAG, "Unhandled response (%zu bytes) received: %s", data.size(),
-               format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+               format_hex_pretty_to(hex_buf, data, '.'));
   }
 }
 
@@ -38,7 +56,7 @@ void JkBalancer::on_status_data_(const std::vector<uint8_t> &data) {
   // };
 
   ESP_LOGI(TAG, "Status frame received");
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Status request (7 bytes)
   // -> 0x55 0xAA 0x01 0xFF 0x00 0x00 0xFF
@@ -140,6 +158,14 @@ void JkBalancer::on_status_data_(const std::vector<uint8_t> &data) {
     this->publish_state_(this->cells_[i].cell_voltage_sensor_, cell_voltage);
   }
 
+  // Clear readings of cells removed by a reduced cell count once instead of publishing NAN on every frame
+  for (uint8_t i = cells; i < 24; i++) {
+    sensor::Sensor *cell_voltage_sensor = this->cells_[i].cell_voltage_sensor_;
+    if (cell_voltage_sensor != nullptr && !std::isnan(cell_voltage_sensor->state)) {
+      cell_voltage_sensor->publish_state(NAN);
+    }
+  }
+
   this->publish_state_(this->min_cell_voltage_sensor_, min_cell_voltage);
   this->publish_state_(this->max_cell_voltage_sensor_, max_cell_voltage);
   this->publish_state_(this->max_voltage_cell_sensor_, (float) max_voltage_cell);
@@ -176,6 +202,8 @@ void JkBalancer::publish_device_unavailable_() {
   this->publish_state_(this->online_status_binary_sensor_, false);
   this->publish_state_(this->errors_text_sensor_, "Offline");
 
+  this->invalidate_binary_sensor_(this->balancing_binary_sensor_);
+
   this->publish_state_(min_cell_voltage_sensor_, NAN);
   this->publish_state_(max_cell_voltage_sensor_, NAN);
   this->publish_state_(min_voltage_cell_sensor_, NAN);
@@ -199,6 +227,13 @@ void JkBalancer::publish_state_(binary_sensor::BinarySensor *binary_sensor, cons
     return;
 
   binary_sensor->publish_state(state);
+}
+
+void JkBalancer::invalidate_binary_sensor_(binary_sensor::BinarySensor *binary_sensor) {
+  if (binary_sensor == nullptr)
+    return;
+
+  binary_sensor->invalidate_state();
 }
 
 void JkBalancer::publish_state_(number::Number *number, float value) {

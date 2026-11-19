@@ -12,6 +12,7 @@ AUTO_LOAD = [
     "text_sensor",
 ]
 CODEOWNERS = ["@syssi"]
+DOMAIN = "jk_balancer"
 MULTI_CONF = True
 
 CONF_JK_BALANCER_ID = "jk_balancer_id"
@@ -51,6 +52,11 @@ def error_overrides(value):
                 f"Error bit {bit} is out of range, must be between 0 and {MAX_ERROR_BIT}",
                 path=[key],
             )
+        # The YAML loader already turns unquoted keys like 0x1 into "1" and rejects
+        # duplicates. Quoted spellings ("0x1", "01", " 1") reach us verbatim; accept
+        # only the plain decimal form so two keys can never alias the same bit.
+        if key != str(bit):
+            raise cv.Invalid(f"Write error bit '{key}' as {bit}", path=[key])
         overrides[bit] = label
 
     return overrides
@@ -68,7 +74,7 @@ JK_BALANCER_COMPONENT_SCHEMA = cv.Schema(
 )
 
 CONFIG_SCHEMA = cv.All(
-    cv.require_esphome_version(2024, 12, 0),
+    cv.require_esphome_version(2026, 1, 0),
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(JkBalancer),

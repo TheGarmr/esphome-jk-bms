@@ -1,3 +1,5 @@
+import math
+
 import esphome.codegen as cg
 from esphome.components import number
 import esphome.config_validation as cv
@@ -68,10 +70,13 @@ CONF_DISCHARGING_OVERTEMPERATURE_RECOVERY = "discharging_overtemperature_recover
 CONF_DISCHARGING_UNDERTEMPERATURE_PROTECTION = "discharging_undertemperature_protection"
 CONF_DISCHARGING_UNDERTEMPERATURE_RECOVERY = "discharging_undertemperature_recovery"
 
-UNIT_AMPERE_HOUR = "Ah"
+try:
+    from esphome.components.const import UNIT_AMPERE_HOUR
+except ImportError:  # ESPHome < 2026.2.0
+    UNIT_AMPERE_HOUR = "Ah"
 
 # V2_NUMBERS: key -> (reg, cmd, type, unit, min, max, step)
-# type: "float" or "int"
+# The type is either "float" or "int"
 V2_NUMBERS = {
     CONF_CELL_OVERVOLTAGE_PROTECTION: (
         0x01,
@@ -324,7 +329,7 @@ HELTEC_NUMBER_SCHEMA = (
     .extend(cv.COMPONENT_SCHEMA)
 )
 
-CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
+_NUMBER_CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
     {
         cv.Optional(CONF_CELL_COUNT): HELTEC_NUMBER_SCHEMA.extend(
             {
@@ -346,7 +351,7 @@ CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
         cv.Optional(CONF_MAX_BALANCE_CURRENT): HELTEC_NUMBER_SCHEMA.extend(
             {
                 cv.Optional(CONF_MIN_VALUE, default=1.0): cv.float_,
-                cv.Optional(CONF_MAX_VALUE, default=15.0): cv.float_,
+                cv.Optional(CONF_MAX_VALUE, default=20.0): cv.float_,
                 cv.Optional(CONF_STEP, default=0.001): cv.float_,
                 cv.Optional(
                     CONF_UNIT_OF_MEASUREMENT, default=UNIT_AMPERE
@@ -659,6 +664,28 @@ CONFIG_SCHEMA = HELTEC_BALANCER_BLE_COMPONENT_SCHEMA.extend(
         ),
     }
 )
+
+
+def _validate_number_bounds(config):
+    for key in (*NUMBERS, *V2_NUMBERS):
+        if key not in config:
+            continue
+        item = config[key]
+        for option in (CONF_MIN_VALUE, CONF_MAX_VALUE, CONF_STEP):
+            if not math.isfinite(item[option]):
+                raise cv.Invalid(
+                    "Number limits and step must be finite", path=[key, option]
+                )
+        if item[CONF_MIN_VALUE] > item[CONF_MAX_VALUE]:
+            raise cv.Invalid(
+                "min_value must not exceed max_value", path=[key, CONF_MIN_VALUE]
+            )
+        if item[CONF_STEP] <= 0:
+            raise cv.Invalid("step must be greater than zero", path=[key, CONF_STEP])
+    return config
+
+
+CONFIG_SCHEMA = cv.All(_NUMBER_CONFIG_SCHEMA, _validate_number_bounds)
 
 
 async def to_code(config):

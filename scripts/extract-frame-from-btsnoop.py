@@ -1,6 +1,6 @@
 import argparse
 import json
-import os
+import pathlib
 
 
 def extract_btatt_values(json_data):
@@ -14,7 +14,10 @@ def extract_btatt_values(json_data):
             and "btatt.value" in entry["_source"]["layers"]["btatt"]
         ):
             btatt_value = entry["_source"]["layers"]["btatt"]["btatt.value"]
-            extracted_data.append("".join(btatt_value))
+            if isinstance(btatt_value, list):
+                extracted_data.extend(btatt_value)
+            else:
+                extracted_data.append(btatt_value)
     return extracted_data
 
 
@@ -29,20 +32,18 @@ def append_values(
     if frame_type != 0:
         start_value_with_frame_type += ":" + str(frame_type).zfill(2)
 
-    for index_of_value, value in enumerate(values):
-        if value.startswith(
-            start_value_with_frame_type
-        ):  # 55:aa:eb:90 or 55:aa:eb:90:[01,02,03]
-            current_packet = value
-            if index_of_value + 1 < len(values):
-                for value_to_append in values[index_of_value + 1 :]:
-                    # 55:aa:eb:90 start of the next frame or "aa:55" command response??
-                    if value_to_append.startswith(
-                        start_value
-                    ) or value_to_append.startswith("aa:55"):
-                        list_of_frame_values.append("".join(current_packet))
-                        break
-                    current_packet += ":" + value_to_append
+    for value in values:
+        if value.startswith((start_value, "aa:55")):
+            if current_packet is not None:
+                list_of_frame_values.append(current_packet)
+            current_packet = (
+                value if value.startswith(start_value_with_frame_type) else None
+            )
+        elif current_packet is not None:
+            current_packet += ":" + value
+
+    if current_packet is not None:
+        list_of_frame_values.append(current_packet)
 
     return list_of_frame_values
 
@@ -53,7 +54,7 @@ def values_to_vertical_string(data):
     if hex_values == []:
         return ""
     matrix = [
-        [0 for _ in range(len(hex_values))]
+        ["   " for _ in range(len(hex_values))]
         for _ in range(max(len(inner_list) for inner_list in hex_values))
     ]
 
@@ -64,41 +65,46 @@ def values_to_vertical_string(data):
             matrix[i_row][i_col] = hex_val + " "
 
     for i, col in enumerate(matrix):
-        output_string += str(i).zfill(3) + " \t"
-        for row in col:
-            output_string += str(row)
-        output_string += "\n"
+        output_string += str(i).zfill(3) + " \t" + "".join(col) + "\n"
     return output_string
 
 
 def load_json_from_file(file_path):
-    with open(file_path) as file:
+    with pathlib.Path(file_path).open(encoding="utf-8") as file:
         return json.load(file)
 
 
 def save_to_file(file_name, data):
-    with open(file_name + ".txt", "w") as file:
+    with pathlib.Path(file_name + ".txt").open("w", encoding="utf-8") as file:
         file.write(data)
         file.close()
 
 
-parser = argparse.ArgumentParser(description="")
-parser.add_argument("file_path", type=str, help="Path to JSON-Datei")
-parser.add_argument(
-    "--frame_type",
-    type=int,
-    default=0,
-    help="Frame Type 0 -> All, 1 -> settingsframe, 2 -> cell info frame, 3 device info frame",
-)
-args = parser.parse_args()
-file_path = args.file_path
-frame_type = args.frame_type
+def main():
+    parser = argparse.ArgumentParser(description="")
+    parser.add_argument("file_path", type=str, help="Path to JSON-Datei")
+    parser.add_argument(
+        "--frame_type",
+        type=int,
+        default=0,
+        help="Frame Type 0 -> All, 1 -> settingsframe, 2 -> cell info frame, 3 device info frame",
+    )
+    args = parser.parse_args()
+    file_path = args.file_path
+    frame_type = args.frame_type
 
-json_data = load_json_from_file(file_path)
-btatt_values = extract_btatt_values(json_data)
-appended_values = append_values(btatt_values, frame_type)
-vertival_string = values_to_vertical_string(appended_values)
+    if pathlib.Path(file_path).suffix == ".txt":
+        parser.error("input file must not use the .txt extension")
 
-file_name, file_extension = os.path.splitext(file_path)
-save_to_file(file_name, vertival_string)
-print("saved to " + file_name + "_output.log")
+    json_data = load_json_from_file(file_path)
+    btatt_values = extract_btatt_values(json_data)
+    appended_values = append_values(btatt_values, frame_type)
+    vertical_string = values_to_vertical_string(appended_values)
+
+    file_name = str(pathlib.Path(file_path).with_suffix(""))
+    save_to_file(file_name, vertical_string)
+    print("saved to " + file_name + ".txt")
+
+
+if __name__ == "__main__":
+    main()

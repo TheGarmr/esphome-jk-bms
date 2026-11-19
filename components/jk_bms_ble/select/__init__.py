@@ -1,8 +1,11 @@
+from dataclasses import dataclass, field
+
 import esphome.codegen as cg
 from esphome.components import select
 import esphome.config_validation as cv
+from esphome.core import CORE
 
-from .. import CONF_JK_BMS_BLE_ID, JK_BMS_BLE_COMPONENT_SCHEMA, jk_bms_ble_ns
+from .. import CONF_JK_BMS_BLE_ID, DOMAIN, JK_BMS_BLE_COMPONENT_SCHEMA, jk_bms_ble_ns
 from ..const import (
     CONF_CAN_PROTOCOL,
     CONF_DRY1_TRIGGER,
@@ -86,7 +89,7 @@ MULTIPLEXED_PORT_MODE_OPTIONS = [
 
 # Maps config key → (register, options, table setter, constexpr array name, data_len).
 # Entries sharing the same arr_name also share the same LookupTable in C++;
-# emitted_arrays in to_code() ensures the constexpr array is defined only once.
+# Lookup arrays are shared by all jk_bms_ble instances in one build.
 _UART_ARR = "JK_BMS_BLE_UART_PROTOCOL_OPTS_"
 _CAN_ARR = "JK_BMS_BLE_CAN_PROTOCOL_OPTS_"
 _LCD_ARR = "JK_BMS_BLE_LCD_BUZZER_TRIGGER_OPTS_"
@@ -158,6 +161,19 @@ LOAD_CONFIG_PRESET_OPTIONS = {
     "LTO": 0x6A,
 }
 
+
+@dataclass
+class SelectCodegenData:
+    emitted_arrays: set[str] = field(default_factory=set)
+
+
+def _get_select_data() -> SelectCodegenData:
+    data = CORE.data.setdefault(DOMAIN, {})
+    if "select_codegen" not in data:
+        data["select_codegen"] = SelectCodegenData()
+    return data["select_codegen"]
+
+
 JkSelect = jk_bms_ble_ns.class_("JkSelect", select.Select, cg.Component)
 JkPresetSelect = jk_bms_ble_ns.class_("JkPresetSelect", select.Select, cg.Component)
 
@@ -195,8 +211,8 @@ CONFIG_SCHEMA = JK_BMS_BLE_COMPONENT_SCHEMA.extend(
 
 
 async def to_code(config):
+    emitted_arrays = _get_select_data().emitted_arrays
     hub = await cg.get_variable(config[CONF_JK_BMS_BLE_ID])
-    emitted_arrays = set()
     for key, (address, options, table_setter, arr_name, data_len) in SELECTS.items():
         if key not in config:
             continue

@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <cmath>
 #include "common.h"
 
 namespace esphome::jk_balancer::testing {
@@ -93,6 +94,35 @@ TEST(JkBalancerStatusTest, CellVoltages) {
   EXPECT_NEAR(cells[3].state, 3.323f, 0.001f);
 }
 
+TEST(JkBalancerStatusTest, RemovedCellsClearedOnce) {
+  TestableJkBalancer bms;
+  sensor::Sensor cell17, cell18;
+  int cell17_publishes = 0, cell18_publishes = 0;
+  cell17.add_on_state_callback([&](float) { cell17_publishes++; });
+  cell18.add_on_state_callback([&](float) { cell18_publishes++; });
+  bms.set_cell_voltage_sensor(16, &cell17);
+  bms.set_cell_voltage_sensor(17, &cell18);
+
+  bms.on_jk_balancer_modbus_data(FUNCTION_READ_ALL, STATUS_FRAME_17S);
+  EXPECT_GT(cell17.state, 0.0f);
+  EXPECT_EQ(cell17_publishes, 1);
+
+  // Reduce the configured cell count to 1: cell 17 is cleared exactly once
+  auto reduced = STATUS_FRAME_17S;
+  reduced[22] = 1;
+  bms.on_jk_balancer_modbus_data(FUNCTION_READ_ALL, reduced);
+  bms.on_jk_balancer_modbus_data(FUNCTION_READ_ALL, reduced);
+  EXPECT_TRUE(std::isnan(cell17.state));
+  EXPECT_EQ(cell17_publishes, 2);
+
+  // A slot that never had a reading is never published
+  EXPECT_EQ(cell18_publishes, 0);
+
+  bms.on_jk_balancer_modbus_data(FUNCTION_READ_ALL, STATUS_FRAME_17S);
+  EXPECT_GT(cell17.state, 0.0f);
+  EXPECT_EQ(cell17_publishes, 3);
+}
+
 // ── Cell voltage statistics ───────────────────────────────────────────────────
 
 TEST(JkBalancerStatusTest, CellVoltageStats) {
@@ -157,6 +187,27 @@ TEST(JkBalancerDispatchTest, WriteRegisterResponsesIgnored) {
 TEST(JkBalancerDispatchTest, UnknownFunctionIgnored) {
   TestableJkBalancer bms;
   bms.on_jk_balancer_modbus_data(0xAB, {0x01, 0x02, 0x03});
+}
+
+TEST(JkBalancerPublishDeviceUnavailableTest, InvalidatesBinarySensors) {
+  TestableJkBalancer bms;
+  binary_sensor::BinarySensor online, balancing;
+  bms.set_online_status_binary_sensor(&online);
+  bms.set_balancing_binary_sensor(&balancing);
+  const std::vector<binary_sensor::BinarySensor *> binary_sensors = {&balancing};
+
+  online.publish_state(true);
+  for (auto *binary_sensor : binary_sensors) {
+    binary_sensor->publish_state(true);
+  }
+
+  bms.publish_device_unavailable_();
+
+  EXPECT_TRUE(online.has_state());
+  EXPECT_FALSE(online.state);
+  for (size_t i = 0; i < binary_sensors.size(); i++) {
+    EXPECT_FALSE(binary_sensors[i]->has_state()) << "binary sensor index " << i;
+  }
 }
 
 }  // namespace esphome::jk_balancer::testing

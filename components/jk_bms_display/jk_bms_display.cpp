@@ -2,9 +2,24 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
+// Fallback for ESPHome < 2026.10.0
+#ifndef ESPHOME_LOG_TAG
+#define ESPHOME_LOG_TAG(name, tag) static const char *const name = tag
+#endif
+
 namespace esphome::jk_bms_display {
 
-static const char *const TAG = "jk_bms_display";
+ESPHOME_LOG_TAG(TAG, "jk_bms_display");
+
+static constexpr size_t MAX_HEX_DUMP_BYTES = 100;
+
+static void log_hex_chunked(const char *tag, const uint8_t *data, size_t size) {
+  char buf[format_hex_pretty_size(100)];
+  for (size_t i = 0; i < size; i += 100) {
+    size_t len = std::min<size_t>(100, size - i);
+    ESP_LOGVV(tag, "  %s", format_hex_pretty_to(buf, sizeof(buf), data + i, len, '.'));
+  }
+}
 
 static const uint8_t SOF_BYTE1 = 0xA5;
 static const uint8_t SOF_BYTE2 = 0x5A;
@@ -91,8 +106,9 @@ void JkBmsDisplay::on_jk_bms_display_data(const std::vector<uint8_t> &data) {
     return;
   }
 
+  char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
   ESP_LOGW(TAG, "Unhandled response received (frame_type: 0x%02X): %s", frame_type,
-           format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+           format_hex_pretty_to(hex_buf, data, '.'));
 }
 
 void JkBmsDisplay::on_jk_bms_display_status_data_(const std::vector<uint8_t> &data) {
@@ -101,7 +117,7 @@ void JkBmsDisplay::on_jk_bms_display_status_data_(const std::vector<uint8_t> &da
   };
 
   ESP_LOGI(TAG, "Status frame (%zu bytes) received", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   uint8_t offset = 6;
 
@@ -169,9 +185,7 @@ void JkBmsDisplay::on_jk_bms_display_status_data_(const std::vector<uint8_t> &da
       max_cell_voltage = cell_voltage;
       max_voltage_cell = i + 1;
     }
-    if (cell_voltage > 0) {
-      this->publish_state_(this->cells_[i].cell_voltage_sensor_, cell_voltage);
-    }
+    this->publish_state_(this->cells_[i].cell_voltage_sensor_, cell_voltage > 0 ? cell_voltage : NAN);
   }
   average_cell_voltage = average_cell_voltage / cells_enabled;
 
@@ -218,7 +232,7 @@ void JkBmsDisplay::on_jk_bms_display_raw_data_(const std::vector<uint8_t> &data)
   };
 
   ESP_LOGD(TAG, "Raw data (%zu bytes) received", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   uint16_t address = jk_bms_get_16bit(4);
   uint16_t value = 0;
@@ -286,8 +300,6 @@ void JkBmsDisplay::dump_config() {
   LOG_SENSOR("", "Max Cell Voltage", this->max_cell_voltage_sensor_);
   LOG_SENSOR("", "Min Voltage Cell", this->min_voltage_cell_sensor_);
   LOG_SENSOR("", "Max Voltage Cell", this->max_voltage_cell_sensor_);
-
-  this->check_uart_settings(2400);
 }
 
 float JkBmsDisplay::get_setup_priority() const {

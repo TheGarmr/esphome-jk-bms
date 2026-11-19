@@ -5,6 +5,7 @@ from esphome.const import CONF_ADDRESS, CONF_ID
 
 DEPENDENCIES = ["uart"]
 CODEOWNERS = ["@syssi"]
+DOMAIN = "jk_balancer_modbus"
 MULTI_CONF = True
 
 jk_balancer_modbus_ns = cg.esphome_ns.namespace("jk_balancer_modbus")
@@ -17,7 +18,7 @@ CONF_JK_BALANCER_MODBUS_ID = "jk_balancer_modbus_id"
 CONF_RX_TIMEOUT = "rx_timeout"
 
 CONFIG_SCHEMA = cv.All(
-    cv.require_esphome_version(2024, 12, 0),
+    cv.require_esphome_version(2026, 1, 0),
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(JkBalancerModbus),

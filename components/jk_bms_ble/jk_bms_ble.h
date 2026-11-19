@@ -179,6 +179,12 @@ class JkBmsBle :
     emergency_duration_number_ = emergency_duration_number;
   }
   void set_re_bulk_soc_number(number::Number *re_bulk_soc_number) { re_bulk_soc_number_ = re_bulk_soc_number; }
+  void set_soc_calibration_number(number::Number *soc_calibration_number) {
+    soc_calibration_number_ = soc_calibration_number;
+  }
+  void set_soh_calibration_number(number::Number *soh_calibration_number) {
+    soh_calibration_number_ = soh_calibration_number;
+  }
 
   void set_balancing_binary_sensor(binary_sensor::BinarySensor *balancing_binary_sensor) {
     balancing_binary_sensor_ = balancing_binary_sensor;
@@ -294,6 +300,9 @@ class JkBmsBle :
   void set_battery_type_id_sensor(sensor::Sensor *battery_type_id_sensor) {
     battery_type_id_sensor_ = battery_type_id_sensor;
   }
+  void set_device_address_sensor(sensor::Sensor *device_address_sensor) {
+    device_address_sensor_ = device_address_sensor;
+  }
   void set_uart1_protocols_enabled_bitmask_sensor(sensor::Sensor *uart1_protocols_enabled_bitmask_sensor) {
     uart1_protocols_enabled_bitmask_sensor_ = uart1_protocols_enabled_bitmask_sensor;
   }
@@ -331,6 +340,9 @@ class JkBmsBle :
   }
   void set_device_model_text_sensor(text_sensor::TextSensor *device_model_text_sensor) {
     device_model_text_sensor_ = device_model_text_sensor;
+  }
+  void set_device_name_text_sensor(text_sensor::TextSensor *device_name_text_sensor) {
+    device_name_text_sensor_ = device_name_text_sensor;
   }
   void set_manufacturing_date_text_sensor(text_sensor::TextSensor *manufacturing_date_text_sensor) {
     manufacturing_date_text_sensor_ = manufacturing_date_text_sensor;
@@ -478,6 +490,8 @@ class JkBmsBle :
   number::Number *smart_sleep_delay_number_{nullptr};
   number::Number *emergency_duration_number_{nullptr};
   number::Number *re_bulk_soc_number_{nullptr};
+  number::Number *soc_calibration_number_{nullptr};
+  number::Number *soh_calibration_number_{nullptr};
 
   sensor::Sensor *balancer_status_bitmask_sensor_{nullptr};
   sensor::Sensor *min_cell_voltage_sensor_{nullptr};
@@ -508,6 +522,7 @@ class JkBmsBle :
   sensor::Sensor *charge_status_time_elapsed_sensor_{nullptr};
   sensor::Sensor *detail_log_entry_count_sensor_{nullptr};
   sensor::Sensor *battery_type_id_sensor_{nullptr};
+  sensor::Sensor *device_address_sensor_{nullptr};
   sensor::Sensor *uart1_protocols_enabled_bitmask_sensor_{nullptr};
   sensor::Sensor *uart2_protocols_enabled_bitmask_sensor_{nullptr};
   sensor::Sensor *uart3_protocols_enabled_bitmask_sensor_{nullptr};
@@ -555,6 +570,7 @@ class JkBmsBle :
   text_sensor::TextSensor *hardware_version_text_sensor_{nullptr};
   text_sensor::TextSensor *battery_type_text_sensor_{nullptr};
   text_sensor::TextSensor *device_model_text_sensor_{nullptr};
+  text_sensor::TextSensor *device_name_text_sensor_{nullptr};
   text_sensor::TextSensor *manufacturing_date_text_sensor_{nullptr};
   text_sensor::TextSensor *serial_number_text_sensor_{nullptr};
 
@@ -576,6 +592,7 @@ class JkBmsBle :
   void decode_jk02_settings_(const std::vector<uint8_t> &data);
   void decode_jk04_settings_(const std::vector<uint8_t> &data);
   void publish_state_(binary_sensor::BinarySensor *binary_sensor, const bool &state);
+  void invalidate_binary_sensor_(binary_sensor::BinarySensor *binary_sensor);
   void publish_state_(number::Number *number, float value);
   void publish_state_(select::Select *obj, const std::string &state);
   void publish_state_(sensor::Sensor *sensor, float value);

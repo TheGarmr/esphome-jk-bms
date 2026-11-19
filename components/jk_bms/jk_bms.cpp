@@ -2,9 +2,18 @@
 #include "esphome/core/log.h"
 #include "esphome/core/helpers.h"
 
+#include <cmath>
+
+// Fallback for ESPHome < 2026.10.0
+#ifndef ESPHOME_LOG_TAG
+#define ESPHOME_LOG_TAG(name, tag) static const char *const name = tag
+#endif
+
 namespace esphome::jk_bms {
 
-static const char *const TAG = "jk_bms";
+ESPHOME_LOG_TAG(TAG, "jk_bms");
+
+static constexpr size_t MAX_HEX_DUMP_BYTES = 100;
 
 static const uint8_t MAX_NO_RESPONSE_COUNT = 5;
 
@@ -43,8 +52,8 @@ void JkBms::on_jk_modbus_data(const uint8_t &function, const std::vector<uint8_t
     return;
   }
 
-  ESP_LOGW(TAG, "Unhandled response (%zu bytes) received: %s", data.size(),
-           format_hex_pretty(&data.front(), data.size()).c_str());  // NOLINT
+  char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
+  ESP_LOGW(TAG, "Unhandled response (%zu bytes) received: %s", data.size(), format_hex_pretty_to(hex_buf, data, '.'));
 }
 
 void JkBms::on_status_data_(const std::vector<uint8_t> &data) {
@@ -110,6 +119,15 @@ void JkBms::on_status_data_(const std::vector<uint8_t> &data) {
     }
     this->publish_state_(this->cells_[i].cell_voltage_sensor_, cell_voltage);
   }
+
+  // Clear readings of cells removed by a reduced cell count once instead of publishing NAN on every frame
+  for (uint8_t i = cells; i < 24; i++) {
+    sensor::Sensor *cell_voltage_sensor = this->cells_[i].cell_voltage_sensor_;
+    if (cell_voltage_sensor != nullptr && !std::isnan(cell_voltage_sensor->state)) {
+      cell_voltage_sensor->publish_state(NAN);
+    }
+  }
+
   if (cells > 0)
     average_cell_voltage = average_cell_voltage / cells;
 
@@ -401,6 +419,12 @@ void JkBms::publish_device_unavailable_() {
   this->publish_state_(this->online_status_binary_sensor_, false);
   this->publish_state_(this->errors_text_sensor_, "Offline");
 
+  this->invalidate_binary_sensor_(this->balancing_binary_sensor_);
+  this->invalidate_binary_sensor_(this->balancing_switch_binary_sensor_);
+  this->invalidate_binary_sensor_(this->charging_binary_sensor_);
+  this->invalidate_binary_sensor_(this->discharging_binary_sensor_);
+  this->invalidate_binary_sensor_(this->dedicated_charger_switch_binary_sensor_);
+
   this->publish_state_(min_cell_voltage_sensor_, NAN);
   this->publish_state_(max_cell_voltage_sensor_, NAN);
   this->publish_state_(min_voltage_cell_sensor_, NAN);
@@ -471,6 +495,13 @@ void JkBms::publish_state_(binary_sensor::BinarySensor *binary_sensor, const boo
     return;
 
   binary_sensor->publish_state(state);
+}
+
+void JkBms::invalidate_binary_sensor_(binary_sensor::BinarySensor *binary_sensor) {
+  if (binary_sensor == nullptr)
+    return;
+
+  binary_sensor->invalidate_state();
 }
 
 void JkBms::publish_state_(sensor::Sensor *sensor, float value) {

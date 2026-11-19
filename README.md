@@ -14,6 +14,10 @@ ESPHome component to monitor a Jikong Battery Management System (JK-BMS) via UAR
 
 All JK-BMS models with software version `>=6.0` are using the implemented protocol and should be supported.
 
+The BLE options `JK02_24S` and `JK02_32S` select frame formats, not the battery's
+cell count. Use reports for the same model and hardware revision when choosing
+between them.
+
 * JK-BD4A8S4P, hw 11.xw, sw 11.24, using `JK02_32S` (reported by [@austin202220](https://github.com/syssi/esphome-jk-bms/issues/297))
 * JK-BD6A17S6P, hw 7.2, sw 7.1.0H
 * JK-BD6A17S8P, hw 9.x, sw 9.01G (reported by [@jonadis](https://github.com/syssi/esphome-jk-bms/issues/35#issuecomment-1035312712))
@@ -34,6 +38,8 @@ All JK-BMS models with software version `>=6.0` are using the implemented protoc
 * JK-B1A20S15P, hw 8.x, sw 8.14U (reported by  [@trippfam07](https://github.com/syssi/esphome-jk-bms/issues/31))
 * JK-B1A20S15P, hw 10.xw, sw 10.07 (reported by [@romeox44](https://github.com/syssi/esphome-jk-bms/discussions/125))
 * JK-B1A20S15P, hw 10.xw, sw 10.10, using `JK02_24S` (reported by [@austin202220](https://github.com/syssi/esphome-jk-bms/issues/297#issuecomment-1510685683))
+* JK-B1A20S15P, hw 11A, sw 11.52, using `JK02_32S` (BLE) (reported by [@joyshmitz](https://github.com/joyshmitz) in [#1061](https://github.com/syssi/esphome-jk-bms/issues/1061))
+* JK-B1A20S15P, hw 18H, sw 18.00, using `JK02_32S` (BLE) (reported by [@joyshmitz](https://github.com/joyshmitz) in [#1061](https://github.com/syssi/esphome-jk-bms/issues/1061))
 * JK-B1A20S15P, hw 11.xw, sw 11.26, using UART-TTL (reported by [@Tesla72PL](https://github.com/syssi/esphome-jk-bms/issues/309))
 * JK-B2A24S15P, hw 6.x, sw 6.1.3S (reported by [@miguel300477](https://github.com/syssi/esphome-jk-bms/issues/57))
 * JK-B2A24S15P, hw 8.x, sw 8.21W (reported by [@mariusvaida](https://github.com/syssi/esphome-jk-bms/issues/120))
@@ -65,10 +71,11 @@ All JK-BMS models with software version `>=6.0` are using the implemented protoc
 * GW-24S4EB (NEEY 4A Smart Active Balancer 4th generation), hw HW-3.2.0, sw ZH-1.2.4 (reported by [@fabhund](https://github.com/syssi/esphome-jk-bms/issues/310))
 * EK-24S15EB (NEEY 15A Smart Active Balancer), (reported by [@msevestre31](https://github.com/syssi/esphome-jk-bms/issues/487))
 * EK-24S10EB (NEEY 10A Smart Active Balancer), hw HW-1.1.5, sw SW-1.1.1, (reported by [@chipsi](https://github.com/syssi/esphome-jk-bms/discussions/487#discussioncomment-9013069))
+* EK-24S20EB (NEEY/EnerKey 20A Smart Active Balancer), hw HW-1.8.0, sw ZL-1.8.2, (reported by [@DominusPave](https://github.com/syssi/esphome-jk-bms/issues/1092))
 
 ## Requirements
 
-* [ESPHome 2025.11.0 or higher](https://github.com/esphome/esphome/releases).
+* [ESPHome 2026.1.0 or higher](https://github.com/esphome/esphome/releases).
 * Generic ESP32 or ESP8266 board
 
 ## Schematics
@@ -94,13 +101,18 @@ All JK-BMS models with software version `>=6.0` are using the implemented protoc
 │GND  RX  TX VBAT│
 └────────────────┘
   │   │   │
-  │   │   └─── GPIO17 (`rx_pin`)
-  │   └─────── GPIO16 (`tx_pin`)
+  │   │   └─── ESP32 GPIO17 / ESP8266 GPIO5 (`rx_pin`)
+  │   └─────── ESP32 GPIO16 / ESP8266 GPIO4 (`tx_pin`)
   └─────────── GND
 ```
 
+### UART pin selection
 
-The UART-TTL (labeled as `RS485`) socket of the BMS can be attached to any UART pins of the ESP. A hardware UART should be preferred because of the high baudrate (115200 baud). The connector is called 4 Pin JST with 1.25mm pitch.
+The pin numbers above match the UART-TTL examples. Cross the data lines: BMS TX connects to ESP RX, and BMS RX connects to ESP TX. The connector is a 4-pin JST with 1.25 mm pitch; some JK-BMS units label this socket `RS485`.
+
+The classic ESP32 `wemos_d1_mini32` example uses GPIO16 for TX and GPIO17 for RX. On this board, avoid GPIO1 and GPIO3 for the BMS: they are UART0 pins and are commonly shared with the USB-to-serial adapter and ESPHome's serial logger. A collision can leave the BMS silent or corrupt received data.
+
+The ESP8266 `d1_mini` example uses GPIO4 for TX and GPIO5 for RX, which ESPHome implements with a software UART. At 115200 baud, a software UART may be less reliable than a hardware UART; use a compatible hardware UART arrangement if your board and wiring allow it. This example uses GPIO4/GPIO5 to keep the BMS off UART0's GPIO1/GPIO3 pins. Its `logger: baud_rate: 0` setting keeps UART0 free in case you move the BMS to GPIO1/GPIO3; if you use other pins, you can re-enable the logger.
 
 ## Installation
 

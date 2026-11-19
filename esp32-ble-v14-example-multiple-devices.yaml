@@ -14,14 +14,17 @@ esphome:
   name: ${name}
   friendly_name: ${name}
   comment: ${device_description}
+  min_version: "2026.11.0"
   project:
     name: "syssi.esphome-jk-bms"
     version: 3.0.0
   devices:
     - id: device0
       name: "${bms0}"
+      relation: via
     - id: device1
       name: "${bms1}"
+      relation: via
 
 esp32:
   board: wemos_d1_mini32
@@ -411,6 +414,9 @@ number:
 sensor:
   - platform: jk_bms_ble
     jk_bms_ble_id: bms0
+    device_address:
+      name: "device address"
+      device_id: device0
     min_cell_voltage:
       name: "min cell voltage"
       device_id: device0
@@ -649,6 +655,9 @@ sensor:
 
   - platform: jk_bms_ble
     jk_bms_ble_id: bms1
+    device_address:
+      name: "device address"
+      device_id: device1
     min_cell_voltage:
       name: "min cell voltage"
       device_id: device1
@@ -1017,6 +1026,9 @@ text_sensor:
     serial_number:
       name: "serial number"
       device_id: device0
+    device_name:
+      name: "device name"
+      device_id: device0
 
   - platform: jk_bms_ble
     jk_bms_ble_id: bms1
@@ -1046,4 +1058,7 @@ text_sensor:
       device_id: device1
     serial_number:
       name: "serial number"
+      device_id: device1
+    device_name:
+      name: "device name"
       device_id: device1

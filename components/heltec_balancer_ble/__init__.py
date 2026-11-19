@@ -4,6 +4,7 @@ import esphome.config_validation as cv
 from esphome.const import CONF_ID, CONF_THROTTLE
 
 CODEOWNERS = ["@syssi"]
+DOMAIN = "heltec_balancer_ble"
 DEPENDENCIES = ["ble_client"]
 AUTO_LOAD = [
     "binary_sensor",
@@ -30,7 +31,7 @@ HELTEC_BALANCER_BLE_COMPONENT_SCHEMA = cv.Schema(
 )
 
 CONFIG_SCHEMA = cv.All(
-    cv.require_esphome_version(2025, 11, 0),
+    cv.require_esphome_version(2026, 1, 0),
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(HeltecBalancerBle),

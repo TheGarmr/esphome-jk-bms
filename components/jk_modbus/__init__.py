@@ -7,6 +7,7 @@ from esphome.cpp_helpers import gpio_pin_expression
 
 DEPENDENCIES = ["uart"]
 CODEOWNERS = ["@syssi"]
+DOMAIN = "jk_modbus"
 MULTI_CONF = True
 
 jk_modbus_ns = cg.esphome_ns.namespace("jk_modbus")
@@ -17,7 +18,7 @@ CONF_JK_MODBUS_ID = "jk_modbus_id"
 CONF_RX_TIMEOUT = "rx_timeout"
 
 CONFIG_SCHEMA = cv.All(
-    cv.require_esphome_version(2025, 7, 0),
+    cv.require_esphome_version(2026, 1, 0),
     cv.Schema(
         {
             cv.GenerateID(): cv.declare_id(JkModbus),

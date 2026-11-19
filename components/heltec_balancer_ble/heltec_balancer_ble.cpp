@@ -1,16 +1,25 @@
 #include "heltec_balancer_ble.h"
 #include "esphome/core/log.h"
-#include "esphome/core/version.h"
+#include "esphome/core/helpers.h"
 
-#if ESPHOME_VERSION_CODE >= VERSION_CODE(2025, 12, 0)
-#define ADDR_STR(x) x
-#else
-#define ADDR_STR(x) (x).c_str()
+// Fallback for ESPHome < 2026.10.0
+#ifndef ESPHOME_LOG_TAG
+#define ESPHOME_LOG_TAG(name, tag) static const char *const name = tag
 #endif
 
 namespace esphome::heltec_balancer_ble {
 
-static const char *const TAG = "heltec_balancer_ble";
+ESPHOME_LOG_TAG(TAG, "heltec_balancer_ble");
+
+static constexpr size_t MAX_HEX_DUMP_BYTES = 100;
+
+static void log_hex_chunked(const char *tag, const uint8_t *data, size_t size) {
+  char buf[format_hex_pretty_size(100)];
+  for (size_t i = 0; i < size; i += 100) {
+    size_t len = std::min<size_t>(100, size - i);
+    ESP_LOGVV(tag, "  %s", format_hex_pretty_to(buf, sizeof(buf), data + i, len, '.'));
+  }
+}
 
 static const uint8_t MAX_NO_RESPONSE_COUNT = 10;
 
@@ -276,7 +285,7 @@ void HeltecBalancerBle::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
       auto *chr = this->parent_->get_characteristic(HELTEC_BALANCER_SERVICE_UUID, HELTEC_BALANCER_CHARACTERISTIC_UUID);
       if (chr == nullptr) {
         ESP_LOGE(TAG, "[%s] No control service found at device, not an Heltec/NEEY balancer..?",
-                 ADDR_STR(this->parent_->address_str()));
+                 this->parent_->address_str());
         break;
       }
 
@@ -322,8 +331,9 @@ void HeltecBalancerBle::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
       if (param->notify.handle != this->char_handle_)
         break;
 
+      char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
       ESP_LOGVV(TAG, "Notification received: %s",
-                format_hex_pretty(param->notify.value, param->notify.value_len).c_str());  // NOLINT
+                format_hex_pretty_to(hex_buf, param->notify.value, param->notify.value_len, '.'));
 
       this->assemble(param->notify.value, param->notify.value_len);
 
@@ -337,7 +347,7 @@ void HeltecBalancerBle::gattc_event_handler(esp_gattc_cb_event_t event, esp_gatt
 void HeltecBalancerBle::update() {
   this->track_online_status_();
   if (this->node_state != espbt::ClientState::ESTABLISHED) {
-    ESP_LOGW(TAG, "[%s] Not connected", ADDR_STR(this->parent_->address_str()));
+    ESP_LOGW(TAG, "[%s] Not connected", this->parent_->address_str());
     return;
   }
 
@@ -364,13 +374,14 @@ void HeltecBalancerBle::update() {
 
 bool HeltecBalancerBle::send_command(uint8_t function, uint8_t command, uint8_t register_address, uint32_t value) {
   auto frame = build_command_frame_(function, command, register_address, value);
-  ESP_LOGD(TAG, "Write register: %s", format_hex_pretty(frame.data(), frame.size()).c_str());  // NOLINT
+  char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
+  ESP_LOGD(TAG, "Write register: %s", format_hex_pretty_to(hex_buf, frame, '.'));
   auto status =
       esp_ble_gattc_write_char(this->parent_->get_gattc_if(), this->parent_->get_conn_id(), this->char_handle_,
                                frame.size(), frame.data(), ESP_GATT_WRITE_TYPE_NO_RSP, ESP_GATT_AUTH_REQ_NONE);
 
   if (status) {
-    ESP_LOGW(TAG, "[%s] esp_ble_gattc_write_char failed, status=%d", ADDR_STR(this->parent_->address_str()), status);
+    ESP_LOGW(TAG, "[%s] esp_ble_gattc_write_char failed, status=%d", this->parent_->address_str(), status);
   }
 
   return (status == 0);
@@ -462,8 +473,8 @@ void HeltecBalancerBle::decode_(const std::vector<uint8_t> &data) {
 #endif
       break;
     case COMMAND_WRITE_REGISTER:
-      ESP_LOGD(TAG, "Write register response received: %s",
-               format_hex_pretty(data.data(), data.size()).c_str());  // NOLINT
+      char hex_buf[format_hex_pretty_size(MAX_HEX_DUMP_BYTES)];
+      ESP_LOGD(TAG, "Write register response received: %s", format_hex_pretty_to(hex_buf, data, '.'));
       break;
     default:
       ESP_LOGW(TAG, "Unsupported message type (0x%02X)", data[4]);
@@ -524,14 +535,13 @@ void HeltecBalancerBle::decode_cell_info_(const std::vector<uint8_t> &data) {
   };
 
   const uint32_t now = millis();
-  if (now - this->last_cell_info_ < this->throttle_) {
+  if (this->last_cell_info_ != 0 && now - this->last_cell_info_ < this->throttle_) {
     return;
   }
   this->last_cell_info_ = now;
 
   ESP_LOGI(TAG, "Cell info frame (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), 150).c_str());                      // NOLINT
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front() + 150, data.size() - 150).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Cell info frame (300 bytes)
   // 0x55 0xAA 0x11 0x01 0x02 0x00 0x2C 0x01 0x38 0xE7 0xFA 0x50 0x40 0xB6 0x04 0x51 0x40 0x85 0x0E 0x51
@@ -705,14 +715,13 @@ void HeltecBalancerBle::decode_cell_info_v2_(const std::vector<uint8_t> &data) {
   };
 
   const uint32_t now = millis();
-  if (now - this->last_cell_info_ < this->throttle_) {
+  if (this->last_cell_info_ != 0 && now - this->last_cell_info_ < this->throttle_) {
     return;
   }
   this->last_cell_info_ = now;
 
   ESP_LOGI(TAG, "Cell info frame v2 (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front(), 150).c_str());                      // NOLINT
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(&data.front() + 150, data.size() - 150).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   ESP_LOGD(TAG, "  Frame counter: %d", data[8]);
 
@@ -799,7 +808,7 @@ void HeltecBalancerBle::decode_settings_v2_(const std::vector<uint8_t> &data) {
   };
 
   ESP_LOGI(TAG, "Settings frame SW-2.0.0 (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(data.data(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Settings frame SW-2.0.0 (150 bytes)
   // 0x55 0xAA 0x11 0x01 0x04 0x00 0x96 0x00 ...
@@ -916,7 +925,7 @@ void HeltecBalancerBle::decode_settings_(const std::vector<uint8_t> &data) {
   };
 
   ESP_LOGI(TAG, "Settings frame legacy (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(data.data(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Settings frame legacy (100 bytes)
   // 0x55 0xAA 0x11 0x01 0x04 0x00 0x64 0x00 0x10 0x0A 0xD7 0xA3 0x3B 0x00 0x00 0x80 0x40 0x00 0x00 0x20
@@ -995,7 +1004,7 @@ void HeltecBalancerBle::decode_factory_defaults_(const std::vector<uint8_t> &dat
   };
 
   ESP_LOGI(TAG, "Factory defaults frame (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(data.data(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Skip the ackowledge frame
   if (data.size() == 20) {
@@ -1028,7 +1037,7 @@ void HeltecBalancerBle::decode_factory_defaults_(const std::vector<uint8_t> &dat
   ESP_LOGI(TAG, "  Standard voltage 1: %.3f V", ieee_float_(heltec_get_32bit(8)));
 
   // 12    4   0x35 0xCC 0xBF 0x3F    Standard voltage 2
-  ESP_LOGI(TAG, "  Standard voltage 2: %.3f V", ieee_float_(heltec_get_32bit(2)));
+  ESP_LOGI(TAG, "  Standard voltage 2: %.3f V", ieee_float_(heltec_get_32bit(12)));
 
   // 16    4   0x51 0x82 0x54 0x40    Battery voltage 1
   ESP_LOGI(TAG, "  Battery voltage 1: %.3f V", ieee_float_(heltec_get_32bit(16)));
@@ -1073,7 +1082,7 @@ void HeltecBalancerBle::decode_factory_defaults_(const std::vector<uint8_t> &dat
   ESP_LOGI(TAG, "  Total runtime: %lu", (unsigned long) heltec_get_32bit(68));
 
   // 72    8   0x32 0x30 0x32 0x32 0x30 0x35 0x33 0x31    Production date
-  ESP_LOGI(TAG, "  Protocol version: %s", std::string(data.begin() + 72, data.begin() + 72 + 8).c_str());
+  ESP_LOGI(TAG, "  Production date: %s", std::string(data.begin() + 72, data.begin() + 72 + 8).c_str());
 
   // 80   18   0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00 0x00
   // 98    1   0x20                   CRC
@@ -1089,7 +1098,7 @@ void HeltecBalancerBle::decode_device_info_(const std::vector<uint8_t> &data) {
   };
 
   ESP_LOGI(TAG, "Device info frame (%zu bytes):", data.size());
-  ESP_LOGD(TAG, "  %s", format_hex_pretty(data.data(), data.size()).c_str());  // NOLINT
+  log_hex_chunked(TAG, data.data(), data.size());
 
   // Device info frame (100 bytes)
   // 0x55 0xAA 0x11 0x01 0x01 0x00 0x64 0x00 0x47 0x57 0x2D 0x32 0x34 0x53 0x34 0x45 0x42 0x00 0x00 0x00
@@ -1136,7 +1145,7 @@ void HeltecBalancerBle::decode_device_info_(const std::vector<uint8_t> &data) {
       std::string(manufacturing_date_begin, std::find(manufacturing_date_begin, manufacturing_date_begin + 8, '\0')));
 
   // 56    4   0x05 0x00 0x00 0x00    Power on count                                 5
-  this->publish_state_(this->power_on_count_sensor_, (float) heltec_get_16bit(56));
+  this->publish_state_(this->power_on_count_sensor_, (float) heltec_get_32bit(56));
 
   // 60    4   0x01 0x91 0x0A 0x00    Total runtime                                  7D
   //                                  (0x0A9101 = 692481 / 3600 = 192.35h = 8.01d)
@@ -1169,6 +1178,12 @@ void HeltecBalancerBle::reset_online_status_tracker_() {
 void HeltecBalancerBle::publish_device_unavailable_() {
   this->publish_state_(this->online_status_binary_sensor_, false);
   this->publish_state_(this->operation_status_text_sensor_, "Offline");
+  this->publish_state_(this->total_runtime_formatted_text_sensor_, "Offline");
+
+  this->invalidate_binary_sensor_(this->balancing_binary_sensor_);
+  this->invalidate_binary_sensor_(this->error_charging_binary_sensor_);
+  this->invalidate_binary_sensor_(this->error_discharging_binary_sensor_);
+  this->invalidate_binary_sensor_(this->error_system_overheating_binary_sensor_);
 
   this->publish_state_(min_cell_voltage_sensor_, NAN);
   this->publish_state_(max_cell_voltage_sensor_, NAN);
@@ -1205,6 +1220,13 @@ void HeltecBalancerBle::publish_state_(binary_sensor::BinarySensor *binary_senso
     return;
 
   binary_sensor->publish_state(state);
+}
+
+void HeltecBalancerBle::invalidate_binary_sensor_(binary_sensor::BinarySensor *binary_sensor) {
+  if (binary_sensor == nullptr)
+    return;
+
+  binary_sensor->invalidate_state();
 }
 
 void HeltecBalancerBle::publish_state_(number::Number *number, float value) {
